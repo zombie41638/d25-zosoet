@@ -1,0 +1,8 @@
+# 本目錄只放正式網站；本機工具、快取與備份不加入版本。
+__pycache__/
+*.py[cod]
+*.log
+*.bak
+.DS_Store
+Thumbs.db
+Desktop.ini
