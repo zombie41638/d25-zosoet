@@ -101,20 +101,15 @@ CHARS.val={n:'瓦倫希娜',t:'',d25BgmFile:'bgm.mp3',d:'擁有6層預知眼。�
           (r.st[i].fx||[]).forEach(x=>{if(x.k==='dm')v=Math.round(v*(1+x.n))});
           v=Math.max(0,v+B_def.vuln-B_def.guard);
           (r.st[targetIdx].fx||[]).forEach(x=>{if(x.k==='rd')v=Math.round(v*(1-x.n))});
-          if((r.st[targetIdx].shield||0)>0){
-            const abs=Math.min(r.st[targetIdx].shield,v);
-            r.st[targetIdx].shield-=abs;
-            r.st[targetIdx].shieldPersistent=Math.max(0,(r.st[targetIdx].shieldPersistent||0)-abs);
-            addDamageFx(damage,r,targetIdx,abs,undefined,true);
-            if(abs>0)landed=true;
-            return {dmg:v,actual:0,shieldAbs:abs};
-          }
+          const shield=absorbShield(r.st[targetIdx],v);
+          addDamageFx(damage,r,targetIdx,shield.absorbed,undefined,true);
+          if(shield.absorbed>0)landed=true;
           const beforeHp=r.hp[targetIdx];
-          r.hp[targetIdx]=Math.max(0,damagedHp(beforeHp,characterMaxHp(r,targetIdx,r.chars[targetIdx],r.st[targetIdx]),v,r.chars[targetIdx],r.st[targetIdx]));
+          r.hp[targetIdx]=Math.max(0,damagedHp(beforeHp,characterMaxHp(r,targetIdx,r.chars[targetIdx],r.st[targetIdx]),shield.remaining,r.chars[targetIdx],r.st[targetIdx]));
           recordHpLoss(r.chars[targetIdx],r.st[targetIdx],beforeHp,r.hp[targetIdx]);
           addDamageFx(damage,r,targetIdx,beforeHp-r.hp[targetIdx]);
           if(r.hp[targetIdx]<beforeHp)landed=true;
-          return {dmg:v,actual:beforeHp-r.hp[targetIdx],shieldAbs:0};
+          const actual=beforeHp-r.hp[targetIdx];if(r.st[targetIdx].xichnExitPending){Object.assign(r,settleCharacters(r,{hp:r.hp,st:r.st,cp:r.cp,team:r.team,log:msgs,damage,instant:true}))}return {dmg:v,actual,shieldAbs:shield.absorbed};
         };
         enemies.forEach(eIdx=>{
           const eName=r.seats[eIdx].name;
@@ -254,7 +249,7 @@ CHARS.san={n:'桑丘',t:'',d:'最大生命上限為設定基礎生命值的1.2�
       }
     }
   ]};
-CHARS.mat={n:'馬蒂亞斯',t:'',d:'受到傷害時，對傷害來源疊加1層復仇對象（上限2層）；你對復仇對象造成傷害時額外加上其層數。方塊反擊成功獲得1層拆開的包裝紙，集滿3層擁有1層毅力：受到致命傷害時生命固定為1（僅一次，萊萬汀的斬殺無法擋）。可發動主動技【萊萬汀】：直接擊殺復仇對象層數最高的目標（層數歸零）。25絕技：【地獄之火】（全體敵方玩家每回合初獲得3層炎傷）、【超毅力】（毅力改為超毅力：受到致命傷害後3回合內血量不低於1，全場僅限發動一次）。',
+CHARS.mat={n:'馬蒂亞斯',t:'',middleFinger:true,d:'【中指】受到黑牌單方面傷害時，對攻擊者施加1層復仇對象；友方中指共用，層數上限為存活友方中指人數×2（含後備）。復仇對象受到中指的非固定傷害時，額外增加對應層數。方塊反擊成功獲得1層拆開的包裝紙，集滿3層擁有1層毅力：受到致命傷害時生命固定為1（僅一次，萊萬汀的斬殺無法擋）。可發動主動技【萊萬汀】：直接擊殺復仇對象層數最高的目標（清除該目標的友方復仇層數）。25絕技：【地獄之火】（全體敵方玩家每回合初獲得3層炎傷）、【超毅力】（毅力改為超毅力：受到致命傷害後3回合內血量不低於1，全場僅限發動一次）。',
   d25Skills:[
     {id:1,name:'地獄之火',type:'進攻型',desc:'全體敵方玩家每回合開始時獲得3層炎傷',
       instantFx:(r,i,o)=>{
@@ -271,8 +266,86 @@ CHARS.mat={n:'馬蒂亞斯',t:'',d:'受到傷害時，對傷害來源疊加1層�
       }
     }
   ]};
+CHARS.lkd={n:'里卡多',t:'',f:'bus',img:'lkd',sfx:'lkd',middleFinger:true,d:'【Limbus陣營】【中指】受到黑牌單方面傷害時，對攻擊者施加1層復仇對象；友方中指共用，上限為存活友方中指人數×2（含後備）。復仇對象受到中指的非固定傷害額外增加層數。【全體集合】開局友方含後備有其他中指時，自身獲得5點護盾，每名其他中指提供1次免費「我牌太爛啦！」，免費次數不增加付費換牌消耗。【償還】受到黑牌單方面傷害時，對攻擊者造成基礎2點傷害，受威力及防護影響。【我的理髮卷！！！！！！！】每反擊成功兩次取得1次使用資格，立即對目前敵人造成10點固定傷害，不推進回合。25絕技：【全員處刑】（所有存活敵人含後備各受到基礎15點傷害）、【大哥的仁慈】（所有存活友方中指含後備回復全場存活角色的復仇對象總層數×3生命）。',
+  ss:{n:'我的理髮卷！！！！！！！',cost:0,repeat:true,can:(r,i)=>r.chars[i]==='lkd'&&r.pair.includes(i)&&r.hp[i]>0&&(r.st[i].lkdHaircuts||0)>0,
+    fx:(r,i)=>{const next=resolve(r,{},null,null,null,{lkdHaircut:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);r.instantFx={id:(r.instantFx?.id||0)+1,seat:i,...result};return result.log.join('；');}},
+  d25Skills:[
+    {id:1,name:'全員處刑',type:'進攻型',desc:'所有存活敵人含後備各受到基礎15點傷害，照常計算威力、復仇增傷及防護',instantFx:(r,i)=>{const next=resolve(r,{},null,null,null,{lkdExecution:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result;}},
+    {id:2,name:'大哥的仁慈',type:'輔助型',desc:'所有存活友方中指含後備回復全場存活角色的復仇對象總層數×3生命',instantFx:(r,i)=>{const log=[],healing=[],members=environmentMembers(r),total=members.reduce((n,m)=>n+Object.entries(m.st.fingerRevenge||{}).reduce((a,[side,v])=>a+Math.min(v,middleFingerCount(r,+side)*2),0),0);middleFingerMembers(r,i).forEach(m=>{const gain=envHeal(r,healingGain(m.st,total*3)),after=healedHp(m.hp,m.max,gain,m.c,m.st,log,r.seats[m.i].name);setEnvironmentHp(r,m,after);addHealingFx(healing,r,m.i,after-m.hp,m.k<0?undefined:m.k,i);if(m.k<0)shareEnvironmentHealing(r,m.i,after-m.hp,log,healing)});syncEnvironmentTeam(r);return {log:[`【大哥的仁慈】全場復仇對象共${total}層，友方中指各回復${total*3}點生命。`,...log],healing};}}
+  ]};
+CHARS.kira={n:'綺羅',t:'',f:'bus',img:'kira',sfx:'kira',middleFinger:true,d:'【Limbus陣營】【中指】受到黑牌單方面傷害時，對攻擊者施加1層共用復仇對象，上限為存活友方中指人數×2（含後備）；中指非固定傷害額外增加對應層數。【這樣做就可以了吧，老爸】每反擊成功兩次取得1次資格，立即對目前對手造成固定5點傷害，只受護盾與毅力影響；有其他存活後備中指時，對手本回合無法出牌，並隨機換上其中一名，不消耗換人次數。換上的成員本回合造成任何傷害時，綺羅一併承受等量傷害，技能本身5點不反傷。【熱絲】對帶有友方復仇對象的敵人實際造成傷害時，獲得1層永久強壯，上限2層。25絕技：【紫羅蘭破壞猛擊】（對目前對手造成全場復仇對象總層數×6的基礎傷害）、【嗚哇...好像超不妙的？】（隊伍有存活馬蒂亞斯才可用，馬蒂亞斯以萊萬汀同時斬殺綺羅與目前對手，永久獲得1＋熱絲層數的強壯）。',
+  ss:{n:'這樣做就可以了吧，老爸',cost:0,repeat:true,can:(r,i)=>r.chars[i]==='kira'&&r.pair.includes(i)&&r.hp[i]>0&&(r.st[i].kiraDadUses||0)>0,
+    fx:(r,i)=>{const result=runKiraInstant(r,i,'kiraDad');r.instantFx={id:(r.instantFx?.id||0)+1,seat:i,...result};return result.log.join('；');}},
+  d25Skills:[
+    {id:1,name:'紫羅蘭破壞猛擊',type:'進攻型',desc:'對目前對手造成全場存活角色含後備的復仇對象總層數×6基礎傷害',instantFx:(r,i)=>runKiraInstant(r,i,'kiraViolet')},
+    {id:2,name:'嗚哇...好像超不妙的？',type:'進攻型',desc:'需隊伍有存活馬蒂亞斯（含後備）：以萊萬汀同時斬殺綺羅與目前對手，馬蒂亞斯永久獲得1＋熱絲層數的強壯',can:(r,i)=>!!kiraMatMember(r,i),instantFx:(r,i)=>runKiraInstant(r,i,'kiraSacrifice')}
+  ]};
+function runKiraInstant(r,i,key){const next=resolve(r,{},null,null,null,{[key]:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result}
+const kiraMatMember=(r,i)=>environmentMembers(r).find(m=>m.i===i&&m.c==='mat');
+const fingerRevengeTotal=r=>environmentMembers(r).reduce((n,m)=>n+Object.entries(m.st.fingerRevenge||{}).reduce((a,[side,v])=>a+Math.min(v,middleFingerCount(r,+side)*2),0),0);
+const kiraSoundFile=n=>`assets/audio/sfx/characters/attack_kira${n}.mp3.MP3`;
+const kiraArt=s=>(s?.kiraHeat||0)>=2?'kira3':s?.kiraArtTurns>0?'kira2':'kira1';
+const kiraCardLocked=(r,i)=>r?.kiraNoPlay?.[i]===r?.round;
+const d25SkillAvailable=(r,i,id)=>{const skill=CHARS[r.chars[i]]?.d25Skills?.find(s=>s.id===id);return !skill?.can||skill.can(r,i)};
+const isMiddleFinger=c=>!!CHARS[c]?.middleFinger;
+const middleFingerSide=(r,i)=>r.cfg.boss&&i!==1?0:i;
+const middleFingerMembers=(r,i)=>environmentMembers(r).filter(m=>isMiddleFinger(m.c)&&middleFingerSide(r,m.i)===middleFingerSide(r,i));
+const middleFingerCount=(r,i)=>middleFingerMembers(r,i).length;
+const revengeStacks=(r,i,s)=>Math.min(s?.fingerRevenge?.[middleFingerSide(r,i)]||0,middleFingerCount(r,i)*2);
+function normalizeFingerRevenge(r){environmentMembers(r).forEach(m=>{Object.keys(m.st.fingerRevenge||{}).forEach(side=>m.st.fingerRevenge[side]=Math.min(m.st.fingerRevenge[side],middleFingerCount(r,+side)*2))});syncEnvironmentTeam(r);return r}
+function initMiddleFinger(r){environmentMembers(r).forEach(m=>{if(m.c!=='lkd'||m.st.lkdAssembled)return;m.st.lkdAssembled=1;const others=middleFingerCount(r,m.i)-1;if(others>0){m.st.shield=(m.st.shield||0)+5;m.st.shieldPersistent=(m.st.shieldPersistent||0)+5;m.st.lkdRedraws=others}});syncEnvironmentTeam(r);return r}
+const lkdSoundFile=n=>`assets/audio/sfx/characters/attack_lkd${n}.MP3`;
+const lkdArt=s=>s?.lkdArtTurns>0?'lkd2':'lkd1';
+CHARS.drunk={n:'醉手夜客',t:'',f:'bus',img:'drunk',sfx:'drunk',d:'【與酒協行 心無所畏】小酌上限10層，各階段累積：1層守護1；2層暗牌槽+1，自己的暗牌與蓋牌選項隱藏；3層強壯1；4層再加1暗牌槽並隨機蓋牌；5層若本回合未醒酒，下次上場取得覺醒（強壯1、守護1、看見全場所有暗牌），持續2次上場回合，結束後才能再次觸發。6層以上爛醉：超過5的每2層強壯1、易損1，所有牌面不可見；覺醒優先解除視野限制。整次連擊實際傷害（含扣盾）≥6時醒酒，小酌-1，每回合最多一次。【酌酒】出牌勾選，跳過下一次自身上場回合；依原始牌面A減1、2～Q加1、K加2，不需命中。自身紅心實際回復>6時，未酌酒也可無視冷卻加1層。10層可立即發動【真鎮終斬】，對目前對手連擊10次各基礎1點傷害，永久刪除目標1個暗牌槽，最低0，不消耗小酌、無冷卻。25絕技：【無形 無音 無念】（覺醒永久持續，5層以上皆可觸發未醒酒條件）、【真•真鎮終斬】（小酌×2基礎群體傷害，含敵方後備，單敵翻倍，每名敵方玩家永久失去1個暗牌槽）。',
+  ss:{n:'真鎮終斬',cost:0,repeat:true,can:(r,i)=>(r.st[i].drunkSip||0)>=10,fx:(r,i)=>{const result=runDrunkInstant(r,i,false);r.instantFx={id:(r.instantFx?.id||0)+1,seat:i,chars:[...r.chars],...result};return result.log.join('；')}},
+  d25Skills:[
+    {id:1,name:'無形 無音 無念',type:'輔助型',desc:'覺醒永久持續，5層以上且本回合未醒酒，下次上場可觸發；已有覺醒立即改為永久',instantFx:(r,i)=>{r.st[i].drunkEndless=1;if(r.st[i].drunkAwake>0)r.st[i].drunkAwake=-1;return '【無形 無音 無念】覺醒不再限時，5層以上皆可觸發覺醒條件。'}},
+    {id:2,name:'真•真鎮終斬',type:'進攻型',desc:'敵人含後備各受到小酌×2基礎傷害，單敵翻倍；每名敵方玩家永久失去1個暗牌槽',instantFx:(r,i)=>runDrunkInstant(r,i,true)}
+  ]};
+const drunkAwake=s=>!!s&&((s.drunkAwake||0)>0||s.drunkAwake===-1);
+const drunkExtra=s=>Math.floor(Math.max(0,(s?.drunkSip||0)-5)/2);
+const drunkSlots=s=>((s?.drunkSip||0)>=2?1:0)+((s?.drunkSip||0)>=4?1:0);
+const drunkActive=(r,i)=>r?.chars?.[i]==='drunk'&&!(r.st[i].sealT>0)&&!envSilent(r);
+function drunkCanSee(r,viewer,owner,up=false,concealPhase=false){
+  if(!drunkActive(r,viewer))return viewer===owner||up;
+  const st=r.st[viewer];if(drunkAwake(st))return true;
+  if(st.drunkSip>=6)return false;
+  if(viewer===owner&&st.drunkSip>=2&&(!up||concealPhase))return false;
+  return viewer===owner||up;
+}
+function beginDrunkTurn(r){if(envSilent(r))return r;r.pair.forEach(i=>{
+  const st=r.st[i];if(!drunkActive(r,i)||r.hp[i]<=0||!st.drunkAwakePending||st.drunkAwakePending>=r.round)return;
+  st.drunkAwake=st.drunkEndless?-1:2;st.drunkAwakePending=0;r.sLog=[...(r.sLog||[]),`${r.seats[i].name} 獲得【覺醒】（${st.drunkEndless?'永久':'2次上場回合'}），看見全場所有暗牌`];
+});syncEnvironmentTeam(r);return r}
+// 依每次結算的同來源、同種類傷害合計連擊；立即技能也計入本回合的醒酒限制。
+function soberDrunk(r,damage,combat,log){if(envSilent(r))return;const totals=new Map();(damage||[]).forEach((e,index)=>{
+  const member=r.team?(e.member??r.act[e.seat]):-1,active=!r.team||member===r.act[e.seat],m=active?{c:r.chars[e.seat],st:r.st[e.seat]}:r.team[e.seat]?.[member];
+  if(m?.c!=='drunk'||m.st.sealT>0||m.st.drunkWakeRound===r.round||!(e.amount>0))return;
+  const hit=(combat||[]).find(c=>c.damageIndex===index),key=`${e.seat}:${member}:${hit?hit.source+':'+hit.sourceMember+':'+hit.attackKind:'effect:'+(e.environment||'damage')}`;
+  const row=totals.get(key)||{st:m.st,seat:e.seat,amount:0};row.amount+=e.amount;totals.set(key,row);
+});for(const row of totals.values()){if(row.amount<6||row.st.drunkWakeRound===r.round)continue;row.st.drunkWakeRound=r.round;row.st.drunkSip=Math.max(0,(row.st.drunkSip||0)-1);log.push(`${r.seats[row.seat].name} 的醉手夜客受到整次${tidyHp(row.amount)}點傷害，醒酒，小酌剩${row.st.drunkSip}層（本回合最多一次）`)}}
+function finishDrunkTurn(r,mv,sk,heart,log,soundCues){if(envSilent(r))return;r.pair.forEach(i=>{
+  if(!drunkActive(r,i)||r.hp[i]<=0)return;const st=r.st[i],hadAwake=drunkAwake(st),card=mv[i],drink=!!card&&!!sk?.[i]&&!(st.drunkCd>0),auto=card?.[0]==='H'&&(heart[i]||0)>6;
+  if(drink||auto){const delta=drink?(+card.slice(1)===1?-1:+card.slice(1)===13?2:1):1;st.drunkSip=Math.max(0,Math.min(10,(st.drunkSip||0)+delta));if(drink)st.drunkCd=2;log.push(`${r.seats[i].name} 發動【${drink?'酌酒':'紅心飲酒'}】，小酌${delta>0?'+':''}${delta}（${st.drunkSip}/10）`);soundCues.push({seat:i,file:'assets/audio/sfx/characters/drink_drunk.mp3'})}
+  if(st.drunkCd>0)st.drunkCd--;if(st.drunkAwake>0)st.drunkAwake--;
+  if(!hadAwake&&!st.drunkAwakePending&&st.drunkWakeRound!==r.round&&(st.drunkEndless?st.drunkSip>=5:st.drunkSip===5))st.drunkAwakePending=r.round;
+})}
+function syncDrunkHands(r){if(!r.hands)return r;r.drunkSlots={...(r.drunkSlots||{})};r.drunkSlotDebt={...(r.drunkSlotDebt||{})};r.hands={...r.hands};r.up={...r.up};r.deck=[...r.deck];r.pend=[...(r.pend||[])];
+  r.seats.forEach((_,i)=>{const want=r.chars[i]==='drunk'?drunkSlots(r.st[i]):0,old=r.drunkSlots[i]||0,delta=want-old;r.drunkSlots[i]=want;if(!delta&&!r.pend.includes(i))return;
+    r.hands[i]=[...r.hands[i]];r.up[i]=[...r.up[i]];
+    if(delta){const floor=Math.max(r.oc[i],r.up[i].length),capacity=r.hands[i].length+delta-(r.drunkSlotDebt[i]||0),target=Math.max(floor,capacity);r.drunkSlotDebt[i]=Math.max(0,floor-capacity);
+      while(r.hands[i].length<target){if(!r.deck.length)r.deck=newDeck(Object.values(r.hands).flat());r.hands[i].push(r.deck.shift())}
+      while(r.hands[i].length>target){const hidden=subtractCards(r.hands[i],r.up[i]);if(!hidden.length)break;r.hands[i]=removeCardOnce(r.hands[i],rnd(hidden))}
+    }
+    r.pend=r.pend.filter(j=>j!==i);const short=r.oc[i]-r.up[i].length;if(!(short>0)||r.hp[i]<=0)return;
+    const hidden=subtractCards(r.hands[i],r.up[i]);if(hidden.length<=short)r.up[i].push(...hidden);
+    else if(drunkActive(r,i)&&r.st[i].drunkSip>=4){const shuffled=hidden.slice();for(let n=shuffled.length-1;n>0;n--){const j=Math.floor(Math.random()*(n+1));[shuffled[n],shuffled[j]]=[shuffled[j],shuffled[n]]}r.up[i].push(...shuffled.slice(0,short))}
+    else r.pend.push(i);
+  });return r}
+function removeDrunkDarkSlot(r,i,log){const hidden=subtractCards(r.hands[i]||[],r.up[i]||[]);if(!hidden.length){log.push(`${r.seats[i].name} 沒有可刪除的暗牌槽`);return}r.hands={...r.hands,[i]:removeCardOnce(r.hands[i],rnd(hidden))};log.push(`${r.seats[i].name} 永久失去1個暗牌槽`)}
+function runDrunkInstant(r,i,group){const next=resolve(r,{},null,null,null,{drunkSlash:i,drunkGroup:group}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result}
 CHARS.nut={n:'高堅果',t:'',f:'pvz',v3only:true,d:'【PVZ陣營】3v3專用角色，不可出陣，只能永久待在後備。血量上限及基礎血量為設定值×1.2。此角色存活時，我方任何角色受到傷害時，傷害（已計算完易損、守護、護盾等後的最終傷害）將轉移到高堅果身上（包括斬殺）；高堅果倒下後不再保護。'};
-CHARS.wood={n:'火炬樹樁',t:'',f:'pvz',v3only:true,img:'wood',sfx:'wood',d:'【PVZ陣營】3v3專用後備植物，不可上場。遊戲開始時一次性給予首發角色10點護盾，並提供主動技能【火炬】4次：本回合出牌點數×2；若對手已出牌，會退還對手的牌。護盾吸收傷害時會阻擋整次攻擊，溢出傷害不會扣除血量。'};
+CHARS.wood={n:'火炬樹樁',t:'',f:'pvz',v3only:true,img:'wood',sfx:'wood',d:'【PVZ陣營】3v3專用後備植物，不可上場。遊戲開始時一次性給予首發角色10點護盾，並提供主動技能【火炬】4次：本回合出牌點數×2；若對手已出牌，會退還對手的牌。護盾只吸收現有盾量，溢出傷害會扣除生命。'};
 CHARS.sunflower={n:'向日葵',t:'',f:'pvz',v3only:true,img:'sunflower',sfx:'sunflower',d:'【PVZ陣營】3v3專用後備植物，不可上場。遊戲開始時給予首發角色1層永久守護。每回合開始隨機獲得1～3點陽光；可消耗4點陽光選擇花色，獲得一張點數7的暫時手牌，可於當回合或下回合打出，之後消失。'};
 CHARS.rean={n:'黎恩',t:'舒華澤',f:'trails',d:'【軌跡陣營】使用CP（隊伍共用）施放技能。主動技（皆為戰技，出牌後於下個回合開始時生效，擇一）：①緋葉剣（30CP）：封鎖敵方技能（含被動）1回合，並給與1層炎傷（回合結束受到炎傷層數的傷害，接著層數-1）。②六連疾風（60CP）：本回合造成的傷害不會被方塊消掉，改為傷害減半（對方出方塊依然會受到反擊傷害），且為群體攻擊（對方只剩一人或一般模式時，改為傷害不減半）。③火紋之太刀（50CP）：本回合點數倍率+50%（向下取整），回合結束時給與敵方2層易損及2層虛弱，持續2回合。④【S技】神氣合一（100CP）：立即給與自己5回合的神氣合一狀態：造成傷害+50%（點數倍率）、受到傷害-50%，戰技強化：烈・緋葉剣（封鎖2回合、2層炎傷）、烈・六連疾風（點數倍率+30%）、火紋之太刀・淺蔥（點數倍率+70%，改為2回合4層易損及4層虛弱）；神氣合一狀態不能再開神氣合一。25絕技：【無想神氣合一】（永久獲得神氣合一全部效果，傷害倍率由1.5改為1.8，仍減傷50%並強化戰技）、【柒型-無】（永久使戰技CP消耗減半，三種戰技分別消耗15／30／25CP；S技仍消耗100CP）。',
  arts:[{id:'hiba',n:'緋葉剣',n2:'烈・緋葉剣',cost:30},{id:'roku',n:'六連疾風',n2:'烈・六連疾風',cost:60,carry:true},{id:'karyu',n:'火紋之太刀',n2:'火紋之太刀・淺蔥',cost:50,carry:true}],
@@ -370,6 +443,22 @@ CHARS.lucio={n:'盧西奧',t:'',f:'bus',img:'lucio',sfx:'lucio',d25BgmFile:'bgm.
     {id:1,name:'解鹿',type:'進攻型',desc:'全體帶決鬥高潮的敵人（含後備）受到4×高潮層數的基礎傷害，不吃攻擊方加成；照常計算受擊方防護',instantFx:(r,i)=>{r.st[i].lucio25=1;const next=resolve(r,{},null,null,null,{lucioUltimate:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result;}},
     {id:2,name:'盧西奧！瞄準心臟！',type:'輔助型',desc:'立即教材+1，基礎點數不足5的牌改為8+教材層數，教材不再有上限',instantFx:(r,i)=>{const s=r.st[i];s.lucio25=1;s.lucioHeart=1;addLucioLesson(s);return `【盧西奧！瞄準心臟！】教材+1（共${s.lucioLesson}），無上限；低點牌轉換為8+教材＝${8+s.lucioLesson}點！`;}}
   ]};
+CHARS.xichn={n:'賈惜春',t:'',f:'bus',img:'xichun',sfx:'xichun',d:'【Limbus陣營】【余桓】有存活且可上場的後備時，受到非斬殺傷害後生命低於目前最大生命50%，本次生命固定為50%（向上取整），立即隨機換上後備，不耗換人次數，每場一次；連擊後續打到接替角色。【始動】3v3中，玩家參與戰鬥的回合結束時，後備惜春獲得1層待，上限5。登場消耗全部待，對目前對手發動一次min(待,3)點固定傷害單方面攻擊，不受威力增減影響；5層改攻擊全體敵人含後備，只剩一名敵人時沿用群攻翻倍。【切磋琢春】初始虛弱3、易損3、自身紅心治療衰減5，生命上限為基礎血量0.7倍。場上黑牌整次實際傷害總和>5、紅心成功回血、成功反擊整次傷害>5、成功斷補，分別推進威力、紅心治療、防護、生命路線。每條路線每回合他人達成最多1階，自己達成共2階，後備也能成長；各路最高6階。生命倍率依序0.7／0.8／0.9／1／1.1／1.2／1.3，向上取整，增加上限時同步增加目前生命差額。25絕技：【醉睡浪浪春】（對目前對手造成基礎15點傷害，施加1回合麻痺）、【智 勇 仁】（四條成長路線各前進3階）。',
+  d25Skills:[
+    {id:1,name:'醉睡浪浪春',type:'進攻型',desc:'對目前對手造成基礎15點傷害並施加1回合麻痺',instantFx:(r,i)=>{const next=resolve(r,{},null,null,null,{xichnUltimate:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result;}},
+    {id:2,name:'智 勇 仁',type:'輔助型',desc:'切磋琢春四條路線各前進3階；生命上限提升時同步增加目前生命差額',instantFx:(r,i)=>{const log=[];xichnAdvance(r,i,r.act?.[i]??-1,[3,3,3,3],log);syncEnvironmentTeam(r);return {log};}}
+  ]};
+const XICHN_ROUTES=['威力','紅心治療','防護','生命'];
+const xichnStages=s=>(s.xichnStages||[0,0,0,0]).map(n=>Math.min(6,Math.max(0,n||0)));
+const xichnHealBonus=s=>[-5,-3,-1,0,1,3,5][xichnStages(s)[1]];
+const xichnHeartGain=(c,s,n)=>c==='xichn'&&!(s.sealT>0)&&n>0?Math.max(0,n+xichnHealBonus(s)):n;
+function armXichn(r){if(!r?.st)return r;r.st.forEach((s,i)=>{s.xichnCanExit=r.chars[i]==='xichn'&&!!r.team&&r.team[i].some((m,k)=>k!==r.act[i]&&!m.dead&&m.hp>0&&canDeploy(m.c));if(r.team)r.team[i].forEach((m,k)=>m.st.xichnCanExit=k===r.act[i]&&s.xichnCanExit)});return r}
+function initXichn(r){const apply=(i,c,s,hp)=>{if(c!=='xichn'||s.xichnInit)return hp;s.xichnInit=1;s.xichnStages=[0,0,0,0];return characterMaxHp(r,i,c,s)};if(r.team)r.team.forEach((t,i)=>t.forEach(m=>m.hp=apply(i,m.c,m.st,m.hp)));r.seats.forEach((_,i)=>{if(r.team){const m=r.team[i][r.act[i]];r.hp[i]=m.hp;r.st[i]=JSON.parse(JSON.stringify(m.st))}else r.hp[i]=apply(i,r.chars[i],r.st[i],r.hp[i])});return armXichn(r)}
+function xichnAdvance(r,i,k,steps,log){const active=k<0||k===r.act?.[i],m=active?null:r.team[i][k],s=active?r.st[i]:m.st,c=active?r.chars[i]:m.c;if(c!=='xichn')return;const beforeMax=characterMaxHp(r,i,c,s),before=xichnStages(s);s.xichnStages=before.map((n,j)=>Math.min(6,n+(steps[j]||0)));const delta=characterMaxHp(r,i,c,s)-beforeMax;if(delta>0){if(active)r.hp[i]+=delta;else m.hp+=delta}const changed=s.xichnStages.map((n,j)=>n>before[j]?`${XICHN_ROUTES[j]}${before[j]}→${n}`:'').filter(Boolean);if(changed.length)log.push(`${r.seats[i].name} 的賈惜春【切磋琢春】：${changed.join('、')}${delta>0?`，最大及目前生命+${delta}`:''}`)}
+function learnXichn(r,events,log,blocked=[]){if(envSilent(r)||!events.length)return;const members=environmentMembers(r).filter(m=>m.c==='xichn'&&!(m.st.sealT>0)&&!blocked.includes(`${m.i}:${m.k<0?r.act?.[m.i]??-1:m.k}`));members.forEach(m=>{const quota=m.st.xichnGrowth||{};events.forEach(e=>{const old=quota[e.route]?.round===r.round?quota[e.route].earned:0,wanted=e.seat===m.i&&e.member===(m.k<0?r.act?.[m.i]??-1:m.k)?2:1;if(wanted<=old)return;const steps=[0,0,0,0];steps[e.route]=wanted-old;xichnAdvance(r,m.i,m.k,steps,log);quota[e.route]={round:r.round,earned:wanted}});m.st.xichnGrowth=quota})}
+function waitXichn(r,pair,round,log,blocked=[]){if(!r.team||envSilent(r))return;r.team.forEach((t,i)=>{if(!pair.includes(i))return;t.forEach((m,k)=>{if(k===r.act[i]||m.c!=='xichn'||m.dead||m.hp<=0||m.st.sealT>0||m.st.xichnWaitRound===round||blocked.includes(`${i}:${k}`))return;m.st.xichnWaitRound=round;m.st.xichnWait=Math.min(5,(m.st.xichnWait||0)+1);log.push(`${r.seats[i].name} 的後備賈惜春獲得1層〔待〕（${m.st.xichnWait}/5）`)})})}
+// 所有換人共用登場結算；使用即時傷害流程，不額外推進回合。
+function enterXichn(before,state,options){if(!state.team||before.d25Batch||options.silent)return state;let next={...before,...state};const arrivals=next.seats.map((_,i)=>i).filter(i=>next.act[i]!==before.act[i]&&next.chars[i]==='xichn'&&next.hp[i]>0&&next.st[i].xichnWait>0&&!(next.st[i].sealT>0)&&!envSilent(next));for(const i of arrivals){if(next.chars[i]!=='xichn'||next.hp[i]<=0)continue;const out=resolve(next,{},null,null,null,{xichnEntry:i}),fx=out.instantResult;delete out.instantResult;next=out;const offset=options.damage?.length||0;if(fx?.soundCues&&options.hits?.includes(i))fx.soundCues.forEach(e=>e.replaceAttack=false);if(fx?.combat)fx.combat.forEach(e=>{if(Number.isInteger(e.damageIndex))e.damageIndex+=offset});options.log.push(...(fx?.log||[]));for(const key of ['damage','combat','healing','hits','soundCues'])if(options[key])options[key].push(...(fx?.[key]||[]))}next.hp.forEach((v,i)=>options.hp[i]=v);next.st.forEach((v,i)=>options.st[i]=v);next.cp.forEach((v,i)=>options.cp[i]=v);return {team:next.team,act:next.act,swapsLeft:next.swapsLeft,chars:next.chars,hp:options.hp,st:options.st,cp:options.cp}}
 const lucioAllies=(r,i)=>r.cfg.boss&&i!==1?[0,2]:[i];
 const lucioBase=(s,card)=>+card.slice(1)<5&&(s.lucioLesson||0)>0?(s.lucioHeart?8:5)+s.lucioLesson:+card.slice(1);
 const lucioCard=(c,s,card)=>c==='lucio'?card[0]+lucioBase(s,card):card;
@@ -471,14 +560,16 @@ CHARS.rufo={n:'羅佳',t:'環指野獸派',f:'bus',img:'rufo',sfx:'rufo',d:'【L
     {id:2,name:'著色',type:'輔助型',desc:'永久使爆裂呈現由4連擊廣域亂射改為4連擊群體攻擊，含敵方後備；沿用群體效果翻倍規則',
       instantFx:(r,i,o)=>{r.st[i].rufoColor=1;return '獲得永久被動【著色】！爆裂呈現改為4連擊群體攻擊，每擊攻擊所有敵人（含後備），沿用群體效果翻倍規則！';}}
   ]};
-CHARS.sad={n:'羅佳',t:'淚鋒之劍',f:'bus',img:'sad',sfx:'sad',d:'【Limbus陣營】被動【淚鋒】：不受連續空防的方塊禁用懲罰。初始虛弱1；每打出一張方塊（不要求反擊成功），結算後獲得1層淚鋒。1層解除自身淚鋒被動的虛弱；2層獲得強壯1；3層消耗全部淚鋒，恢復初始虛弱1、移除淚鋒的強壯，並使下一張牌點數+5，該牌攻擊或反擊命中時使對方理智-20（沒有可變理智則追加3點固定傷害）。下一張牌即消耗加成，未命中不保留。25絕技：【阿卡納裂淚穿刺】（對目前單一敵人造成「自身本局已出的方塊張數＋對手目前手牌方塊張數」×3的基礎傷害）、【磨滅的自尊】（淚鋒不再消耗，上限固定3層；達3層後每張牌點數+5並附帶命中效果；方塊反擊點數×1.5，向下取整）。',
+CHARS.sad={n:'羅佳',t:'淚鋒之劍',f:'bus',img:'sad',sfx:'sad',d:'【Limbus陣營】被動【淚鋒】：不受連續空防的方塊禁用懲罰。初始虛弱1；每打出一張方塊（不要求反擊成功），結算後獲得1層淚鋒。1層解除自身淚鋒被動的虛弱；2層獲得強壯1；3層消耗全部淚鋒，恢復初始虛弱1、移除淚鋒的強壯，並使下一張牌點數+6，該牌攻擊或反擊命中時使對方理智-20（沒有可變理智則追加3點固定傷害）。下一張牌即消耗加成，未命中不保留。25絕技：【阿卡納裂淚穿刺】（對目前單一敵人造成「自身本局已出的方塊張數＋對手目前手牌方塊張數」×3的基礎傷害）、【磨滅的自尊】（淚鋒不再消耗，上限固定3層；達3層後每張牌點數+6並附帶命中效果；方塊反擊點數×1.5，向下取整）。',
   d25Skills:[
     {id:1,name:'阿卡納裂淚穿刺',type:'進攻型',desc:'立即對單一敵人造成（自身本局已出方塊張數＋對手目前手牌方塊張數）×3的基礎傷害，沿用威力、減傷與防護結算',
       instantFx:(r,i,o)=>{const next=resolve(r,{},null,null,null,{sadUltimate:i}),result=next.instantResult;delete next.instantResult;Object.assign(r,next);return result;}},
-    {id:2,name:'磨滅的自尊',type:'輔助型',desc:'淚鋒不再消耗且上限固定3層，達3層後每張牌皆享有+5及命中效果；方塊反擊點數×1.5（向下取整）',
-      instantFx:(r,i,o)=>{r.st[i].sadPride=1;r.st[i].sadTears=Math.min(3,r.st[i].sadTears||0);return '獲得永久被動【磨滅的自尊】：淚鋒上限固定3層且不消耗，達3層後每張牌點數+5並附帶命中效果；方塊反擊點數×1.5！';}}
+    {id:2,name:'磨滅的自尊',type:'輔助型',desc:'淚鋒不再消耗且上限固定3層，達3層後每張牌皆享有+6及命中效果；方塊反擊點數×1.5（向下取整）',
+      instantFx:(r,i,o)=>{r.st[i].sadPride=1;r.st[i].sadTears=Math.min(3,r.st[i].sadTears||0);return '獲得永久被動【磨滅的自尊】：淚鋒上限固定3層且不消耗，達3層後每張牌點數+6並附帶命中效果；方塊反擊點數×1.5！';}}
   ]};
 const sadEmpowered=s=>!!(s.sadNext||s.sadPride&&(s.sadTears||0)>=3);
+const sadArt=s=>s?.sadArtTurns>0?'sad2':'sad1';
+const sadSoundFile=n=>`assets/audio/sfx/characters/attack_sad${n}.mp3.mp3`;
 // 沉默及技能封鎖期間沿用一般空防規則；既有禁用狀態不影響淚鋒被動生效時出牌。
 const diamondBanned=(r,i)=>!!(r?.st?.[i]?.noD&&!(r.chars[i]==='sad'&&!envSilent(r)&&!(r.st[i].sealT>0)));
 CHARS.heathcliff={n:'魔王希斯克利夫',t:'Erlking',f:'bus',img:'heathcliff',sfx:'heathcliff',d:'【Limbus陣營】每回合開始隨機獲得一種花色盾：♣盾使本回合被梅花斷補時仍可恢復原治療量的一半；♠盾使本回合受到的黑桃傷害減半；♦盾使本回合受到的反擊傷害減半；♥盾使對手本回合的治療量減半。對手本回合沒有打出與盾相同花色的牌時，獲得1層棺；每7層棺獲得1層毅力。受到一般致命傷害時消耗1層毅力並鎖血至1點，斬殺無法阻擋。25絕技：【魔王所經之處，唯余悲傷與哀鳴】（消耗所有棺，對單一敵人造成棺層數×4的基礎傷害）、【杜拉罕】（永久使自身對敵人的攻擊傷害成為群體攻擊，含方塊反擊與敵方後備，立繪切換為杜拉罕形態）。',
@@ -699,10 +790,10 @@ function valorantShopUI(i){
 }
 const bambooCanSkin=(st,card)=>!!(card&&'SC'.includes(card[0])&&(st.bambooAny||+card.slice(1)>=10));
 const baseImgK=k=>k==='heathcliff'&&room&&((room.chars&&room.st&&room.chars.some((c,i)=>c==='heathcliff'&&room.st[i].dullahan))||(room.team&&room.team.some(t=>t.some(m=>m.c==='heathcliff'&&m.st&&m.st.dullahan))))?'heathcliff2':(k==='rufo'&&room&&room.chars&&room.st&&room.chars.some((c,i)=>c==='rufo'&&room.st[i]&&(room.st[i].rufoWolf||0)>0)?'rufo2':(k==='verg'&&room&&((room.chars&&room.st&&room.chars.some((c,i)=>c==='verg'&&room.st[i].vergEgo))||(room.team&&room.team.some(t=>t.some(m=>m.c==='verg'&&m.st&&m.st.vergEgo))))?'verg2':(k==='sinclair'&&room&&room.team&&room.team.some(t=>t.some(m=>m.c==='sinclair'&&m.st&&m.st.noble))?'rouge2':(k&&CHARS[k]&&CHARS[k].img)||k||'default')));
-const imgK=(k,s)=>k==='firefu'?firefuArt(s||room?.st?.[room.chars?.indexOf('firefu')]):k==='lucio'?(s||room?.st?.[room.chars?.indexOf('lucio')])?.lucio25?'lucio2':'lucio':baseImgK(k);
+const imgK=(k,s)=>k==='kira'?kiraArt(s||room?.st?.[room.chars?.indexOf('kira')]):k==='lkd'?lkdArt(s||room?.st?.[room.chars?.indexOf('lkd')]):k==='sad'?sadArt(s||room?.st?.[room.chars?.indexOf('sad')]):k==='firefu'?firefuArt(s||room?.st?.[room.chars?.indexOf('firefu')]):k==='lucio'?(s||room?.st?.[room.chars?.indexOf('lucio')])?.lucio25?'lucio2':'lucio':baseImgK(k);
 function rollIshExtra(s0,round){s0.ishExtra=rnd(['S','C','H','D'].filter(s=>s!==s0.ishSet));s0.ishExtraRound=round}
-const charArtDir=k=>`assets/images/characters/${({heathcliff2:'heathcliff',rouge2:'rouge',rufo2:'rufo',verg2:'verg',firefu1:'firefu',firefu2:'firefu',firefu3:'firefu',lucio2:'lucio'})[k]||k}`;
-const charArtSrc=(k,pos)=>`${charArtDir(k)}/char_${k}${pos?'_'+pos:''}.png`;
+const charArtDir=k=>`assets/images/characters/${({kira1:'kira',kira2:'kira',kira3:'kira',lkd1:'lkd',lkd2:'lkd',sad1:'sad',sad2:'sad',heathcliff2:'heathcliff',rouge2:'rouge',rufo2:'rufo',verg2:'verg',firefu1:'firefu',firefu2:'firefu',firefu3:'firefu',lucio2:'lucio'})[k]||k}`;
+const charArtSrc=(k,pos)=>/^kira[123]?$/.test(k)?`${charArtDir(k)}/char_kira_${pos||'left'}${k==='kira3'?3:k==='kira2'?2:1}.png`:/^lkd[12]?$/.test(k)?`${charArtDir(k)}/char_lkd_${pos||'left'}${k==='lkd2'?2:1}.png`:/^sad[12]?$/.test(k)?`${charArtDir(k)}/char_sad_${pos||'left'}${k==='sad2'?2:1}.png`:`${charArtDir(k)}/char_${k}${pos?'_'+pos:''}.png`;
 const isPvz=c=>!!(CHARS[c]&&CHARS[c].f==='pvz');
 const canDeploy=c=>!!CHARS[c]&&!isPvz(c);
 function rufoGroupFactor(r,i){if(!r.team)return 2;const targets=r.cfg.boss?(i===1?[0,2]:[1]):r.seats.map((_,j)=>j).filter(j=>j!==i),alive=targets.reduce((n,j)=>n+r.team[j].filter((m,k)=>canDeploy(m.c)&&(k===r.act[j]?r.hp[j]>0:!m.dead&&m.hp>0)).length,0);return alive>=2?1:2}
@@ -710,7 +801,7 @@ const dwt=c=>c==='leo'||c==='jia_qiu'||c==='verg'?3:c==='sinclair'?2:1;
 const dwtSum=(D,i)=>D.picks[i].reduce((a,c)=>a+dwt(c),0);
 const dfull=(D,i)=>dwtSum(D,i)>=3||!!(D.pass&&D.pass[i]);
 const draftCanPick=(D,c,i)=>!!CHARS[c]&&!CHARS[c].hidden&&!(room.bans||[]).includes(c)&&(!room||!room.cfg||!room.cfg.factions||room.cfg.factions[CHARS[c].f]!==false)&&!D.picks.flat().includes(c)&&!dfull(D,i)&&dwtSum(D,i)+dwt(c)<=3&&(!isPvz(c)||D.picks[i].filter(isPvz).length<2);
-function matTarget(rm,m,hp){let best=-1,bn=0;const rv=rm.st[m].rv||{};
+function matTarget(rm,m,hp){let best=-1,bn=0;const rv=Object.fromEntries(rm.seats.map((_,i)=>[i,environmentEnemies(rm,m).includes(i)?revengeStacks(rm,m,rm.st[i]):0]));
   Object.keys(rv).forEach(k=>{const j=+k,n=rv[k];if(hp[j]>0&&n>bn){best=j;bn=n}});return best}
 const cmdCard=c=>room&&!envSilent(room)&&room.status==='playing'&&room.chars&&room.chars.some((k,i)=>k==='rien'&&room.st[i].cmd===c&&(!room.st[i].cmdAddict||rd()===i));
 const handCount=i=>(room.hands[i]||[]).length+(i===rd()?privateSunCards.length:(isHost?(hostSunCards[i]||[]).length:0));
@@ -740,7 +831,7 @@ const nutMax=()=>Math.round(room.cfg.hp*1.2);
 const canCancel=i=>!battleObservationActive()&&room.status==='playing'&&room.phase==='play'&&!mirrorPending()&&!environmentTradePending()&&!!room.team&&!!pendSw(i)&&room.hp[i]>0&&(test||i===rd());
 function cancelSw(i){if(canCancel(i))db.doc(`rooms/${code}/moves/w${room.round}_${i}`).set({to:-1})}
 function resv(i,pos){if(!room.team)return'';const pend=pendSw(i);
-  return`<div class="resv ${pos}">${room.team[i].map((m,k)=>k===room.act[i]?'':`<div data-damage-target="${i}:${k}" class="rchip ${m.dead?'dead':''} ${m.c==='nut'?'nutc':''} ${pend&&pend.to===k?'pend':''}" title="${esc(CHARS[m.c].n)}${m.dead?'（已倒下）':'｜HP '+m.hp+(m.c==='nut'?' / '+nutMax():'')}${m.c==='jia_qiu'?'｜'+(m.st.notExpecting?'不再期待（強壯+20）'+(m.st.timeUpTurns>0?'｜剩'+m.st.timeUpTurns+'回合':''):'期待×'+(m.st.expectation||0))+(m.st.egoStanding?'｜綻放EGO：而立（強壯+1、指定單方面攻擊+2）':'')+(m.st.shield?'｜護盾×'+m.st.shield:''):''}${(m.st.rupture||0)?'｜破裂×'+m.st.rupture:''}${m.c==='zilu'&&(m.st.ziluStrong||0)?'｜強壯×'+m.st.ziluStrong:''}${pend&&pend.to===k&&canCancel(i)?'｜點擊取消換人':''}" ${canSw(i,k)?`draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${k}')"`:''} ${(canSw(i,k)||(pend&&pend.to===k&&canCancel(i)))?`onclick="clickSw(${i},${k})"`:''}><img src="${charArtSrc(imgK(m.c,m.st),pos)}" data-k="${imgK(m.c,m.st)}" data-p="${pos}" data-s="0" onerror="imgFb(this)"><span>${CHARS[m.c].n}${m.c==='nut'?'<br>❤'+Math.max(0,m.hp)+'/'+nutMax():''}</span>${environmentTargetFxUI(i,k)}</div>`).join('')}</div>`}
+  return`<div class="resv ${pos}">${room.team[i].map((m,k)=>k===room.act[i]?'':`<div data-damage-target="${i}:${k}" class="rchip ${m.dead?'dead':''} ${m.c==='nut'?'nutc':''} ${pend&&pend.to===k?'pend':''}" title="${esc(CHARS[m.c].n)}${m.dead?'（已倒下）':'｜HP '+m.hp+(m.c==='nut'?' / '+nutMax():'')}${m.c==='jia_qiu'?'｜'+(m.st.notExpecting?'不再期待（強壯+20）'+(m.st.timeUpTurns>0?'｜剩'+m.st.timeUpTurns+'回合':''):'期待×'+(m.st.expectation||0))+(m.st.egoStanding?'｜綻放EGO：而立（強壯+1、指定單方面攻擊+2）':'')+(m.st.shield?'｜護盾×'+m.st.shield:''):''}${m.c==='xichn'?'｜待×'+(m.st.xichnWait||0)+'｜切磋琢春 '+xichnStages(m.st).join('／')+'｜余桓'+(m.st.xichnYuhuanUsed?'已使用':'可用'):''}${(m.st.rupture||0)?'｜破裂×'+m.st.rupture:''}${m.c==='zilu'&&(m.st.ziluStrong||0)?'｜強壯×'+m.st.ziluStrong:''}${pend&&pend.to===k&&canCancel(i)?'｜點擊取消換人':''}" ${canSw(i,k)?`draggable="true" ondragstart="event.dataTransfer.setData('text/plain','${k}')"`:''} ${(canSw(i,k)||(pend&&pend.to===k&&canCancel(i)))?`onclick="clickSw(${i},${k})"`:''}><img src="${charArtSrc(imgK(m.c,m.st),pos)}" data-k="${imgK(m.c,m.st)}" data-p="${pos}" data-s="0" onerror="imgFb(this)"><span>${CHARS[m.c].n}${m.c==='nut'?'<br>❤'+Math.max(0,m.hp)+'/'+nutMax():''}</span>${environmentTargetFxUI(i,k)}</div>`).join('')}</div>`}
 function teamInfo(i){if(!room.team)return'';const pend=pendSw(i),nt=nutOf(i),pvz=room.team[i].filter(m=>isPvz(m.c)).map(m=>m.c==='wood'?`🔥火炬×${m.st.torchUses||0}`:m.c==='sunflower'?`☀陽光×${m.st.sun||0}`:`🥜高堅果 ${m.dead?'倒下':'守護中 '+Math.max(0,m.hp)+'/'+nutMax()}`).join('｜');
   return`<div class="mut">換人 ${room.swapsLeft[i]}/2${pend?'｜⏳下回合換上 '+CHARS[room.team[i][pend.to].c].n+(canCancel(i)?'（點擊出戰角色可取消）':''):''}｜存活 ${room.team[i].filter(m=>!m.dead).length}/${room.team[i].length}${pvz?'｜'+pvz:''}</div>`}
 function dropSw(e,i){e.preventDefault();const k=+e.dataTransfer.getData('text/plain');if(canSw(i,k))requestSwap(i,k)}
@@ -760,15 +851,15 @@ function artSel(s){const C=CHARS[room.chars[s]];if(envSilent(room)||!C||!C.arts|
 function toggleHide(c,index){const s=rd(),up=room.up[s],hid=subtractCards(room.hands[s],up),need=hid.length-Math.max(0,room.oc[s]-up.length),at=index===undefined?hid.indexOf(c):index;
   if(at<0||hid[at]!==c)return;hideSlots=hideSlots.includes(at)?hideSlots.filter(i=>i!==at):[...hideSlots,at];hideSel=hideSlots.map(i=>hid[i]);
   if(hideSel.length===need){db.doc(`rooms/${code}/moves/v${room.round}_${s}`).set({hide:hideSel});hideSel=[];hideSlots=[]}else render()}
-function playRedraw(){const s=rd(),d=redrawCost(room,s);
+function playRedraw(){const s=rd(),d=redrawCost(room,s);if(kiraCardLocked(room,s))return;
   if(isoPending()||valorantShopPending()||mirrorPending()||environmentTradePending())return;
-  showBattleConfirm('確認換牌','「我牌太爛啦！」：立即結束本回合，你將受到 '+d+' 點傷害並重新抽取手牌（可無限使用，每次增加5點傷害）。確定嗎？',()=>{if(!moves[room.round+'_'+s]&&!isoPending()&&!valorantShopPending()&&!mirrorPending()&&!environmentTradePending()&&!d25DrawPending())db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({redraw:true})})}
+  showBattleConfirm('確認換牌','「我牌太爛啦！」：立即結束本回合，你將受到 '+d+' 點傷害並重新抽取手牌'+(freeLkdRedraw(room,s)?'（使用一次免費次數，不增加付費消耗）。':'（可無限使用，每次增加5點傷害）。')+'確定嗎？',()=>{if(!moves[room.round+'_'+s]&&!isoPending()&&!valorantShopPending()&&!mirrorPending()&&!environmentTradePending()&&!d25DrawPending())db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({redraw:true})})}
 function prevMult(c,s0,suit){let m=1;const atk='SCD'.includes(suit),C0=CHARS[c],a=(C0&&C0.arts&&s0.artOn)?s0.art:null,en=shinActive(s0);
   if(atk){if(c==='rean'&&en)m+=s0.musouShin?.8:.5;(s0.fx||[]).forEach(x=>{if(x.k==='dm')m+=x.n})}
   if(c==='rean'){if(a==='karyu')m+=en?.7:.5;if(a==='roku'&&en)m+=.3}
   return Math.max(0,m)}
 /* 卡牌預覽：計算最終傷害（點數倍率、強壯/虛弱、易損/守護、減傷%、護盾、大地之牆、本回合生效的戰技） */
-function estimate(c,h){if(h!=='pick'||!room||!room.pair||!room.st)return'';const s=rd(),o=room.pair.find(x=>x!==s);if(o===undefined||s<0)return'';if(envActive(room,'confusion'))return'❔ 混亂：結算時才會隨機決定花色；點數不變，可能造成攻擊、斷補、治療或反擊，無法提前預測結果。';
+function estimate(c,h){if(h==='pick'&&room?.st&&rd()>=0&&!drunkCanSee(room,rd(),rd(),sel===c?!!selUp:room.up[rd()]?.includes(c)))return'牌面隱藏，出牌時依實際卡牌結算。';if(h!=='pick'||!room||!room.pair||!room.st)return'';const s=rd(),o=room.pair.find(x=>x!==s);if(o===undefined||s<0)return'';if(envActive(room,'confusion'))return'❔ 混亂：結算時才會隨機決定花色；點數不變，可能造成攻擊、斷補、治療或反擊，無法提前預測結果。';
   if(envActive(room,'invertedStage'))return'🔀 倒錯舞台：揭牌後交換雙方花色，原始點數不變；效果依對手花色結算。'+(envActive(room,'assassin')?'🗡️ 刺客：J／Q／K點數+5；遇到對手A／2／3，最終點數歸零。':'');
   const cl=x=>JSON.parse(JSON.stringify(x)),id=[s,o],S=id.map(i=>envSilent(room)?newSt():cl(room.st[i]));
   const sealed=j=>(room.st[id[j]].sealT||0)>0;
@@ -778,13 +869,14 @@ function estimate(c,h){if(h!=='pick'||!room||!room.pair||!room.st)return'';const
   id.forEach((i,j)=>syncTktState(C[j],S[j],room.hp[i],maxHp(i)));
   const fastPreview=C[0]==='zilu'&&S[0].ziluFast&&S[0].ziluFastRound!==room.round&&!(S[0].stun>0)&&!moves[room.round+'_'+s]&&!moves[room.round+'_'+o];if(fastPreview)S[0].ziluStrong=(S[0].ziluStrong||0)+2;
   const halved=()=>!!room.team&&(room.cfg.boss&&s===1||rufoGroupFactor(room,s)===1);
-  const lp=(C[0]==='lei')?leiInfo(s):null,suit=lp&&lp.quick?'S':c[0],hungerBonus=room.team&&S[0].urgentHunger&&room.hp[s]>=maxHp(s)*.3&&room.team[s].some(m=>m.c==='sinclair')?Math.ceil(room.hp[s]*.1)+1:0,torchMul=room.team&&S[0].torchRound===room.round?2:1,r=envRank(room,S[0],c,(effRank(C[0],S[0],c,prevMult(C[0],S[0],suit),lp?lp.bonus:0)+hungerBonus)*torchMul),bo=calcBuffs(C[1],S[1]),adj=bo.vuln-bo.guard,rdv=redSt(C[1],S[1]),sh=S[1].shield||0,rv=envSilent(room)?0:(room.st[s].rv&&room.st[s].rv[o])||0;
+  const lp=(C[0]==='lei')?leiInfo(s):null,suit=lp&&lp.quick?'S':c[0],hungerBonus=room.team&&S[0].urgentHunger&&room.hp[s]>=maxHp(s)*.3&&room.team[s].some(m=>m.c==='sinclair')?Math.ceil(room.hp[s]*.1)+1:0,torchMul=room.team&&S[0].torchRound===room.round?2:1,r=envRank(room,S[0],c,(effRank(C[0],S[0],c,prevMult(C[0],S[0],suit),lp?lp.bonus:0)+hungerBonus)*torchMul),bo=calcBuffs(C[1],S[1]),adj=bo.vuln-bo.guard,rdv=redSt(C[1],S[1]),sh=S[1].shield||0,rv=!isMiddleFinger(C[0])?0:revengeStacks(room,s,S[1]);
+  const xichnProtection=C[1]==='xichn'&&!S[1].xichnYuhuanUsed&&room.team&&room.team[o].some((m,k)=>k!==room.act[o]&&!m.dead&&m.hp>0&&canDeploy(m.c));
   const a0=(CHARS[C[0]]&&CHARS[C[0]].arts&&S[0].artOn)?S[0].art:null,rk=C[0]==='rean'&&a0==='roku'&&'SC'.includes(suit)&&halved(),wall=(S[1].wall||0)>0;
-  const fin=(v0,half,fm,kind)=>{if(wall||C[1]==='iso'&&S[1].isoDual)return 0;let v=v0;if(half)v=Math.ceil(v/2);v+=((!envSilent(room)&&C[0]!=='verg'&&(room.st[s].san||0)>=45)?2:0)+rv+(envBlood(room)&&v>0?2:0);v=envBlackDamage(room,v,suit);if(v>0){v=Math.max(0,v+adj);if(v>0&&rdv>0)v=Math.ceil(v*(1-Math.min(.9,rdv))-1e-9);if(v>0&&fm)v=Math.floor(v*fm+1e-9);if(v>0&&kind==='spade'&&C[1]==='heathcliff'&&S[1].shieldSuit==='S')v=Math.ceil(v/2);if(S[1].isoCut)v=tidyHp(v*1.5);if(v>0&&sh>0)v=0}if(C[1]==='tkt')v=Math.min(v,tktHealth(room.hp[o],maxHp(o),S[1]).current);return tidyHp(v)},finText=(v0,half,fm,kind)=>{const lo=fin(v0+(C[0]==='verg'?1:0),half,fm,kind),hi=fin(v0+(C[0]==='verg'?3:0),half,fm,kind);return lo===hi?lo:`${lo}～${hi}`};
+  const fin=(v0,half,fm,kind)=>{if(wall||C[1]==='iso'&&S[1].isoDual)return 0;let v=v0;if(half)v=Math.ceil(v/2);v+=((!envSilent(room)&&C[0]!=='verg'&&(room.st[s].san||0)>=45)?2:0)+rv+(envBlood(room)&&v>0?2:0);v=envBlackDamage(room,v,suit);if(v>0){v=Math.max(0,v+adj);if(v>0&&rdv>0)v=Math.ceil(v*(1-Math.min(.9,rdv))-1e-9);if(v>0&&fm)v=Math.floor(v*fm+1e-9);if(v>0&&kind==='spade'&&C[1]==='heathcliff'&&S[1].shieldSuit==='S')v=Math.ceil(v/2);if(S[1].isoCut)v=tidyHp(v*1.5);if(v>0&&sh>0)v=Math.max(0,v-sh)}if(C[1]==='tkt')v=Math.min(v,tktHealth(room.hp[o],maxHp(o),S[1]).current);if(xichnProtection&&v>0&&room.hp[o]-v<maxHp(o)/2)v=Math.max(0,room.hp[o]-Math.ceil(maxHp(o)/2));return tidyHp(v)},finText=(v0,half,fm,kind)=>{const lo=fin(v0+(C[0]==='verg'?1:0),half,fm,kind),hi=fin(v0+(C[0]==='verg'?3:0),half,fm,kind);return lo===hi?lo:`${lo}～${hi}`};
   const valEvasionNote=C[1]==='val'&&S[1].eye>=2&&!(S[1].heat>0)&&'SC'.includes(suit)?`（預知眼：若對方剩餘手牌中最大方塊原始點數≥${+c.slice(1)}，可消耗2層及該牌，該回合持續閃避符合點數的傷害；每回合只消耗並補抽一次，梅花斷補仍生效）`:'';
-  const sadNote=C[0]==='sad'?(sadEmpowered(S[0])?`（淚鋒+5已計入；${S[0].sadPride&&S[0].sadTears>=3?'固定3層，持續生效':'本張牌後消耗加成'}，攻擊或反擊命中使對方${CHARS[room.chars[o]]?.f==='bus'&&room.chars[o]!=='verg'?'理智-20':'追加3點固定傷害'}）`:'')+(suit==='D'?`（出牌後淚鋒+1，不要求反擊成功；${S[0].sadPride?'上限3層且不消耗，反擊點數×1.5已計入':S[0].sadTears>=2?'消耗3層並準備下一張牌+5':'累積至3層時消耗'}；免空防禁止）`:''):'';
+  const sadNote=C[0]==='sad'?(sadEmpowered(S[0])?`（淚鋒+6已計入；${S[0].sadPride&&S[0].sadTears>=3?'固定3層，持續生效':'本張牌後消耗加成'}，攻擊或反擊命中使對方${CHARS[room.chars[o]]?.f==='bus'&&room.chars[o]!=='verg'?'理智-20':'追加3點固定傷害'}）`:'')+(suit==='D'?`（出牌後淚鋒+1，不要求反擊成功；${S[0].sadPride?'上限3層且不消耗，反擊點數×1.5已計入':S[0].sadTears>=2?'消耗3層並準備下一張牌+6':'累積至3層時消耗'}；免空防禁止）`:''):'';
   const sn=(!envSilent(room)&&room.chars[s]&&CHARS[room.chars[s]]&&CHARS[room.chars[s]].f==='bus')?(room.st[s].san||0):0,
-    note=valEvasionNote+sadNote+(C[0]==='lucio'?lucioConversionNote+('SC'.includes(suit)?`（雙方出黑牌且盧西奧點數≥5時拼點；目標原有高潮${S[1].duelClimax||0}提供拼點+${S[1].duelClimax||0}，本回合強壯${S[0].lucioStrong||0}已計入；本次新增高潮不計加成）`:''):'')+(envActive(room,'assassin')?'（刺客：J／Q／K點數+5；若對手出A／2／3，自己的最終點數歸零）':'')+(C[0]==='moses'?`（出牌即累積${+c.slice(1)}層煙霧-${SMOKE_NAMES[S[0].smokeCrimson?'crimson':'SC'.includes(suit)?'red':suit==='D'?'purple':'white']}，上限${S[0].smokeCrimson?20:6}）`:'')+(C[1]==='tkt'?'（時間殺人魔：單次傷害不跨血條）':'')+(wall?'（對方有大地之牆，將抵擋這次傷害）':'')+(sh>0?'（護盾抵擋整次傷害）':'')+(envActive(room,'allIn')&&+c.slice(1)>=10?'（孤注一擲：點數×1.5，回合結束失去5血）':'')+(envActive(room,'peace')&&'SC'.includes(suit)?'（和平鐘聲：黑牌傷害−4）':'')+(torchMul>1?'（火炬：點數×2）':'')+(C[0]==='verg'?'（維吉里烏斯：攻擊額外隨機+1～3）':'')+(sn>=45?'（理智45：傷害+2）':sn<=-45?'（理智-45：侵蝕，系統隨機出牌；下回合理智重置為0）':sn?`（理智${sn}：${50+Math.abs(sn)}%機率${sn>0?'+1':'-1'}）`:''),
+    note=valEvasionNote+sadNote+(xichnProtection?'（余桓：本次可保留50%生命並隨機免費換人，後續連擊依接替角色結算）':'')+(C[0]==='lucio'?lucioConversionNote+('SC'.includes(suit)?`（雙方出黑牌且盧西奧點數≥5時拼點；目標原有高潮${S[1].duelClimax||0}提供拼點+${S[1].duelClimax||0}，本回合強壯${S[0].lucioStrong||0}已計入；本次新增高潮不計加成）`:''):'')+(envActive(room,'assassin')?'（刺客：J／Q／K點數+5；若對手出A／2／3，自己的最終點數歸零）':'')+(C[0]==='moses'?`（出牌即累積${+c.slice(1)}層煙霧-${SMOKE_NAMES[S[0].smokeCrimson?'crimson':'SC'.includes(suit)?'red':suit==='D'?'purple':'white']}，上限${S[0].smokeCrimson?20:6}）`:'')+(C[1]==='tkt'?'（時間殺人魔：單次傷害不跨血條）':'')+(wall?'（對方有大地之牆，將抵擋這次傷害）':'')+(sh>0?`（護盾吸收最多${sh}點，溢出扣生命）`:'')+(envActive(room,'allIn')&&+c.slice(1)>=10?'（孤注一擲：點數×1.5，回合結束失去5血）':'')+(envActive(room,'peace')&&'SC'.includes(suit)?'（和平鐘聲：黑牌傷害−4）':'')+(torchMul>1?'（火炬：點數×2）':'')+(C[0]==='verg'?'（維吉里烏斯：攻擊額外隨機+1～3）':'')+(sn>=45?'（理智45：傷害+2）':sn<=-45?'（理智-45：侵蝕，系統隨機出牌；下回合理智重置為0）':sn?`（理智${sn}：${50+Math.abs(sn)}%機率${sn>0?'+1':'-1'}）`:''),
     nm=SU[suit]+NM(+c.slice(1))+'（點數 '+r+'）'+(fastPreview?'（超高速：先出牌強壯+2）':'')+(C[0]==='sinclair'&&S[0].laDemande?'【la demande】回合結束追加基礎3點追擊，並隨機附加1層虛弱或易損（各3回合）；本牌':'')+(C[0]==='rufo'&&skOn&&S[0].rufoReady?`【爆裂呈現】先進行4連擊${S[0].rufoColor?'群體攻擊（含後備）':'廣域亂射'}，每擊基礎傷害${(S[0].rufoSkillUses||0)+1}${S[0].rufoColor&&rufoGroupFactor(room,s)===2?'（群體效果×2）':''}；接著本牌`:'');
   if('SC'.includes(suit)&&id.some((i,j)=>C[j]==='iso'&&S[j].isoAdapt))return nm+'【應變】本回合雙方黑牌攻擊傷害固定為0；反擊與技能追擊照常。';
   if(isValorant(C[0])){const gun=valorantGun(C[0],S[0]),count=valorantTriggers(C[0],S[0],c),extra=gun===VALORANT_GUNS.guardian&&suit==='C'?'；斷補成功追加5點傷害':'';let detail;if(suit==='S')detail='每次預計傷害 '+finText(r,false,0,'spade');else if(suit==='C')detail='每次預計傷害 '+finText(gun===VALORANT_GUNS.odin?r:Math.ceil(r/2),false)+extra+'，使對方治療無效';else if(suit==='H'){const v=envHeal(room,Math.ceil(r*healingFactor(S[0])));detail=(envActive(room,'emergency')?'每次獲得護盾 ':'每次治療量 ')+v+healingNote(S[0])}else detail='被攻擊時反擊，每次預計傷害 '+finText(r*(gun===VALORANT_GUNS.judge?2:1),false);return nm+'【'+(gun?.n||'無槍械')+'】'+count+'次效果，'+detail+'；各次分開計算狀態，對方方塊只反擊一次。'+note}
@@ -794,8 +886,8 @@ function estimate(c,h){if(h!=='pick'||!room||!room.pair||!room.st)return'';const
   if(C[0]==='sinclair'&&skOn&&((S[0].endlessHunger||0)>=40)&&!S[0].laCastrationUsed)return nm+'【La Castration】單方面群體攻擊，預計造成'+envAttack(room,15)+'點傷害';
   if(suit==='S')return nm+(lp&&lp.quick?'【快刀亂麻】':'')+'：預計造成最終傷害 '+finText(r,rk,lp&&lp.quick?(halved()?.6:1.2):0,'spade')+' 點（已計算易損、守護、減傷、護盾）'+(C[1]==='heathcliff'&&S[1].shieldSuit==='S'?'（希斯克利夫♠盾減半）':'')+(hungerBonus?`（迫切的飢餓：點數 +${hungerBonus}）`: '')+(lp&&lp.quick?(room.cfg.boss&&s===1?'，並群體攻擊兩位挑戰者':halved()?'，並群體攻擊敵方後備':''):'')+note;
   if(suit==='C')return nm+'：預計造成最終傷害 '+finText(Math.ceil(r/2),rk)+' 點（已計算易損、守護、減傷、護盾），並使其本回合治療無效'+(C[1]==='heathcliff'&&S[1].shieldSuit==='C'?'（希斯克利夫♣盾仍可恢復一半治療量）':'')+note;
-if(suit==='H'&&envActive(room,'emergency'))return nm+'：預計獲得 '+envHeal(room,healingGain(S[0],r))+' 點護盾（急救運轉；可被梅花斷補）'+lucioConversionNote;
-if(suit==='H'){const traumaMul=healingFactor(S[0]),raw=envHeal(room,Math.ceil(r*traumaMul)),heartShield=C[1]==='heathcliff'&&S[1].shieldSuit==='H',heal=tidyHp(healedHp(room.hp[s],maxHp(s),heartShield?Math.ceil(raw/2):raw,C[0],S[0])-room.hp[s]);return nm+'：預計回復 '+heal+' 點血量'+(C[0]==='tkt'?'（只補當前血條；原本滿條時改為補回1條、該條1血）':'')+(traumaMul<1?healingNote(S[0])+`（原始 ${r}）`:'')+(heartShield?'（希斯克利夫♥盾減半）':'')+(envActive(room,'allIn')&&+c.slice(1)>=10?'（孤注一擲：回合結束失去5血）':'')+(envActive(room,'kindness')&&heal>0?'（善意：敵方同步回復一半，遵守治療限制）':'')+lucioConversionNote}
+if(suit==='H'&&envActive(room,'emergency'))return nm+'：預計獲得 '+envHeal(room,healingGain(S[0],xichnHeartGain(C[0],S[0],r)))+' 點護盾（急救運轉；可被梅花斷補）'+lucioConversionNote;
+if(suit==='H'){const traumaMul=healingFactor(S[0]),raw=envHeal(room,Math.ceil(xichnHeartGain(C[0],S[0],r)*traumaMul)),heartShield=C[1]==='heathcliff'&&S[1].shieldSuit==='H',heal=tidyHp(healedHp(room.hp[s],maxHp(s),heartShield?Math.ceil(raw/2):raw,C[0],S[0])-room.hp[s]);return nm+'：預計回復 '+heal+' 點血量'+(C[0]==='tkt'?'（只補當前血條；原本滿條時改為補回1條、該條1血）':'')+(traumaMul<1?healingNote(S[0])+`（原始 ${r}）`:'')+(heartShield?'（希斯克利夫♥盾減半）':'')+(envActive(room,'allIn')&&+c.slice(1)>=10?'（孤注一擲：回合結束失去5血）':'')+(envActive(room,'kindness')&&heal>0?'（善意：敵方同步回復一半，遵守治療限制）':'')+lucioConversionNote}
   return nm+'：免疫攻擊；若被攻擊，反擊最終傷害 '+finText(r,false)+' 點'+note}
 // 每次結算只記錄視覺事件，與血量、命中及回合規則分開。
 function addDamageFx(list,rm,seat,amount,member,shield=false){
@@ -828,7 +920,7 @@ function flushHealingFx(){
 function addCombatDamage(list,rm,source,damage,start=0,kind='',shieldBefore=0){
   if(!Number.isInteger(source))return;
   damage.slice(start).forEach((e,n)=>{if(e.seat===source)return;const m=rm.team&&rm.team[e.seat]?.[e.member],c=m?m.c:rm.chars[e.seat],s=m?m.st:rm.st[e.seat],max=characterMaxHp(rm,e.seat,c,s);
-    list.push({...e,source,sourceMember:rm.team?rm.act[source]:-1,kind:kind==='counter'?'counter':'strike',broken:e.shield&&shieldBefore>0&&e.amount>=shieldBefore,power:Math.min(1,e.amount/Math.max(1,max)),damageIndex:start+n});
+    list.push({...e,source,sourceMember:rm.team?rm.act[source]:-1,kind:kind==='counter'?'counter':'strike',attackKind:kind,broken:e.shield&&shieldBefore>0&&e.amount>=shieldBefore,power:Math.min(1,e.amount/Math.max(1,max)),damageIndex:start+n});
   });
 }
 function addCounterGuard(list,rm,source,seat){list.push({source,sourceMember:rm.team?rm.act[source]:-1,seat,member:rm.team?rm.act[seat]:-1,kind:'block',shield:true,amount:0,power:0,broken:false})}
@@ -891,7 +983,7 @@ function stepHp(){hpAnim.raf=0;let go=false;Object.keys(hpAnim).forEach(k=>{cons
   applyHp();if(go)hpAnim.raf=requestAnimationFrame(stepHp)}
 function animHp(){if(!room||!room.hp)return;room.hp.forEach((h,i)=>{const to=Math.max(0,h),m=maxHp(i),c=room.chars&&room.chars[i],a=hpAnim[i];
   if(!a||a.c!==c)hpAnim[i]={v:to,to,m,c};else{a.to=to;a.m=m}});applyHp();if(!hpAnim.raf)hpAnim.raf=requestAnimationFrame(stepHp)}
-function skillLabel(s){const c=room.chars[s];if(envSilent(room)||(room.st[s].sealT||0)>0)return'';if(c==='card_ish'&&(room.st[s].light||0)>=5)return'光斬';if(c==='rufo'&&room.st[s].rufoReady)return`爆裂呈現（第${(room.st[s].rufoSkillUses||0)+1}次）`;if(c==='sinclair'&&(room.st[s].endlessHunger||0)>=40&&!room.st[s].laCastrationUsed)return'La Castration';if(c==='yoshi'&&handCount(s)>=2&&!(room.st[s].yoshiCd>0))return'天殺';
+function skillLabel(s){const c=room.chars[s];if(envSilent(room)||(room.st[s].sealT||0)>0)return'';if(c==='drunk'&&!(room.st[s].drunkCd>0))return'酌酒';if(c==='card_ish'&&(room.st[s].light||0)>=5)return'光斬';if(c==='rufo'&&room.st[s].rufoReady)return`爆裂呈現（第${(room.st[s].rufoSkillUses||0)+1}次）`;if(c==='sinclair'&&(room.st[s].endlessHunger||0)>=40&&!room.st[s].laCastrationUsed)return'La Castration';if(c==='yoshi'&&handCount(s)>=2&&!(room.st[s].yoshiCd>0))return'天殺';
   if(c==='bamboo'){const card=sunCardSel?privateSunCards.find(x=>x.id===sunCardSel)?.card:sel;return bambooCanSkin(room.st[s],card)?'捨吾皮肉':''}
   if(c==='ring'&&room.hp[s]===1)return'閉館';
   if(c==='shi_faust')return room.st[s].bow?'放矢（取消拉弓）':'拉弓';
@@ -979,8 +1071,8 @@ function stTxt(i){if(!room.st)return'';if(envSilent(room))return environmentStat
   if(st.divineAnnihilation>0)o.push(tip('🌩',`神滅（剩${st.divineAnnihilation}回合）`,'任何牌的最終點數固定為24；參與戰鬥後扣除回合，旁觀與後備期間不扣，麻痺優先。'));
   if(c==='umb')o.push(st.rage>0?tip('🌩',`神怒（剩${st.rage}場戰鬥）`,'神怒期間出牌點數皆視為K（13）；結束後神罰歸零。'):tip('','神罰 '+st.stack+'/3','每次受到攻擊累積1層；達3層進入神怒。'));
   if(c==='val')o.push(tip('👁',st.eye>0?`預知眼×${st.eye}`:st.xinVal?'預知眼×0':`預知眼過熱（剩${st.heat||0}場，傷害-2）`,'預知眼參與攻擊拼點；拼點成功消耗1層並獲得巴勒莫劍術。至少2層時，若剩餘手牌中最大方塊的原始點數≥對方黑牌，自動消耗2層及該方塊閃避該次傷害並補抽一張手牌；每回合只消耗一張方塊與2層預知眼，該回合持續以該牌原始點數判定閃避，即使預知眼耗盡也能連閃，梅花斷補仍生效。預知眼歸零後過熱，恢復時重置為6層；心-瓦倫希娜不會過熱。')+(st.sw?tip('🗡',`巴勒莫×${st.sw}`,'永久增加等量出牌點數。'):'')+(st.xinVal?tip('💖','心-瓦倫希娜','獲得被動【心-瓦倫希娜】：預知眼不再過熱，且每回合結束自動回復 1 層預知眼。'):''));
-  if(st.shield>0&&c!=='san')o.push(tip('🛡',`護盾${st.shield}`,'抵擋整次傷害；護盾吸收後，溢出傷害也不會扣除血量。實際扣盾算攻擊命中，會觸發音效及命中效果。'));
-  if(c==='san')o.push(tip('🍷',`血宴×${st.feast}`,'血宴由治療或吸血累積；達5層可發動血宴強化。')+(st.feastBoost?tip('🩸','飢餓滿足','【25絕技被動】接下來獲得的血宴提升為 1.5 倍。'):'')+(st.shield?tip('🛡',`護盾${st.shield}`,'抵擋整次傷害；護盾吸收後，溢出傷害也不會扣除血量。實際扣盾算攻擊命中，會觸發音效及命中效果。'):'')+(st.hard?tip('🔰',`硬血盾×${st.hard}`,'持續期間受到傷害減少2點，最低為0。'):''));
+  if(st.shield>0&&c!=='san')o.push(tip('🛡',`護盾${st.shield}`,'護盾只吸收現有盾量，溢出傷害會繼續扣除生命。實際扣盾算攻擊命中，會觸發音效及命中效果。'));
+  if(c==='san')o.push(tip('🍷',`血宴×${st.feast}`,'血宴由治療或吸血累積；達5層可發動血宴強化。')+(st.feastBoost?tip('🩸','飢餓滿足','【25絕技被動】接下來獲得的血宴提升為 1.5 倍。'):'')+(st.shield?tip('🛡',`護盾${st.shield}`,'護盾只吸收現有盾量，溢出傷害會繼續扣除生命。實際扣盾算攻擊命中，會觸發音效及命中效果。'):'')+(st.hard?tip('🔰',`硬血盾×${st.hard}`,'持續期間受到傷害減少2點，最低為0。'):''));
   if(c==='rien'){const g=st.grace||0,lv=g>=9?3:g>=6?2:g>=3?1:0,hidden=st.cmdAddict&&rd()!==i;o.push(tip('✨',`加護×${g}${lv?`（解放${lv}）`:''}`,'指令牌成功獲得3層、失敗獲得1層；3/6/9層分別解放，提供守護、強壯與守護，或可發動Replica。')+'　'+tip('☯',`業×${st.karma||0}${st.noKarma?'（停止累積）':''}`,'未使用指令牌時累積；每2層增加1易損，每3層增加1虛弱。')+(st.repUsed?tip('⚡','Replica已使用','Furioso-Replica 每場遊戲只能發動一次。'):'')+(st.cmd?`　${tip('🔷',hidden?'指令牌已隱藏':`指令牌 ${cs(st.cmd)}`,hidden?'指令成癮：指令牌僅持有者可見。':'使用這張牌會依效果成功或失敗累積指令加護。')}`:''))}
   if(st.cmdAddict)o.push(tip('🕵️','指令成癮','【25絕技被動】指令牌對其他玩家隱藏，且指令牌點數增幅+8。'));
   if(st.xinRien)o.push(tip('💖','心-里恩','【25絕技被動】業已清除；額外強壯×'+(st.xinStrong||0)+'、守護×'+(st.xinGuard||0)+'。'));
@@ -992,7 +1084,12 @@ function stTxt(i){if(!room.st)return'';if(envSilent(room))return environmentStat
     if(st.hellFire)o.push(tip('🔥','地獄之火','【25絕技被動】每回合初對所有敵方施加3層炎傷。'));
   }
   if(c==='lei'){o.push(tip('🐅',st.mhu>0?'猛虎標彈 ×'+st.mhu:'虎標彈 ×'+(st.hu||0),'消耗彈藥可提高出牌點數；消耗5枚猛虎標彈會發動快刀亂麻。'));o.push(tip('🩸',`累積生命損失 ${st.leiHpLost||0}`,'從戰鬥第一回合記錄實際扣除的生命，包含自損與後備受傷；回血不抵銷，護盾損失不計。'));if(st.xinLei)o.push(tip('💖',`心-雷橫（強壯×${Math.floor((st.leiHpLost||0)/5)}）`,'每累積損失5點生命獲得1層永久強壯，包含發動絕技前的損失；換人保留。'))}
-  if(c==='sad'){o.push(tip('💧',`淚鋒×${st.sadTears||0}/3`,'每打出一張方塊就累積1層，不要求反擊成功；1層解除本被動的虛弱，2層強壯1，3層消耗後回到虛弱1並準備下一張牌+5；免空防禁止。')+'　'+tip('♦',`已出反擊牌 ${st.sadCounters||0}張`,'本局羅佳已出的方塊張數，換人保留，淚鋒消耗不會重置；阿卡納裂淚穿刺用此數量加上對手手牌方塊張數，再乘3。'));if(st.sadNext)o.push(tip('⚔','下一張牌+5','下一張牌點數+5，攻擊或反擊命中使對方理智-20；沒有可變理智則追加3點固定傷害。出牌即消耗，未命中不保留。'));if(st.sadPride)o.push(tip('🗡','磨滅的自尊','淚鋒上限固定3層且不再消耗；達3層後每張牌點數+5並附帶命中效果。反擊點數×1.5，向下取整。'))}
+  if(isMiddleFinger(c))o.push(tip('🖕','中指',`受到黑牌單方面傷害，對攻擊者施加復仇對象；友方共用，上限${middleFingerCount(room,i)*2}層（存活中指${middleFingerCount(room,i)}人，含後備）。`));
+  if(c==='kira')o.push(tip('🔥',`熱絲${st.kiraHeat||0}/2`,'對有友方復仇對象的敵人實際造成傷害時獲得1層永久強壯，最大2層。')+tip('👊',`反擊累積${st.kiraCounters||0}/2・老爸技${st.kiraDadUses||0}次`,'每反擊成功兩次獲得一次資格；立即造成固定5點傷害，只受護盾與毅力影響；有後備中指則免費自動換人並使對手本回合無法出牌；換上的成員本回合造成的傷害會等量反傷綺羅。'));
+  if((room.kiraRelays||[]).some(x=>x.round===room.round&&x.seat===i&&x.member===room.act?.[i]&&!room.team[i][x.kira].dead))o.push(tip('🔗','綺羅連動','本回合自己造成的實際傷害，會同步對後備綺羅造成等量傷害。'));
+  if(kiraCardLocked(room,i))o.push(tip('🚫','本回合無法出牌','受到綺羅的老爸技能影響，該回合不能出牌。'));
+  if(c==='lkd')o.push(tip('👊',`反擊累積${st.lkdCounters||0}/2・理髮卷${st.lkdHaircuts||0}次`,'每反擊成功兩次獲得一次理髮卷資格，立即造成10點固定傷害。')+tip('🛡','全體集合',`免費換牌剩${st.lkdRedraws||0}次；開局每名其他友方中指提供1次。`)+tip('↩','償還','受到黑牌單方面傷害時，對攻擊者造成基礎2點傷害，受威力與復仇增傷及防護影響。'));
+  if(c==='sad'){o.push(tip('💧',`淚鋒×${st.sadTears||0}/3`,'每打出一張方塊就累積1層，不要求反擊成功；1層解除本被動的虛弱，2層強壯1，3層消耗後回到虛弱1並準備下一張牌+6；免空防禁止。')+'　'+tip('♦',`已出反擊牌 ${st.sadCounters||0}張`,'本局羅佳已出的方塊張數，換人保留，淚鋒消耗不會重置；阿卡納裂淚穿刺用此數量加上對手手牌方塊張數，再乘3。'));if(st.sadNext)o.push(tip('⚔','下一張牌+6','下一張牌點數+6，攻擊或反擊命中使對方理智-20；沒有可變理智則追加3點固定傷害。出牌即消耗，未命中不保留。'));if(st.sadPride)o.push(tip('🗡','磨滅的自尊','淚鋒上限固定3層且不再消耗；達3層後每張牌點數+6並附帶命中效果。反擊點數×1.5，向下取整。'))}
   if(c==='dihui'){const fw=st.shunxing||0,rv=st.nixing||0,tot=fw+rv;o.push(tip('➡️',`順行－憐憫×${fw}`,'使用紅色牌時累積；可選擇於下回合每層轉成1層虛弱（持有心-地慧星則無）及1層守護。')+'　'+tip('⬅️',`逆行－憎惡×${rv}`,'使用黑色牌時累積；可選擇於下回合每層轉成1層易損（持有心-地慧星則無）及1層強壯。')+(st.dihuiNext?`　${tip('🔮',`下回合啟用${st.dihuiNext==='forward'?'順行':'逆行'}`,`下回合將按${st.dihuiNext==='forward'?fw:rv}層累積值（每層換算1層）計算效果。`)}`:'')+'　'+tip('🎯',`已確定的對手×${Math.floor(tot/2)}`,'每2層順逆行總和增加1層，會標記對手手牌。')+'　'+tip('🌀',`殘像糾纏×${st.afterimage||0}`,'對手使用未被標記的手牌時累積；每次造成傷害後追加真實追擊。'));
     if(st.afterimageRampage)o.push(tip('🌀','殘像暴走','【25絕技被動】敵方若出未被標記的牌，直接受到該牌點數×(20%×殘像糾纏層數)的固定傷害。'));
     if(st.xinDihui)o.push(tip('🌌','心-地慧星','【25絕技被動】順行與逆行不再有負面效果（順行不獲得虛弱，逆行不獲得易損）。'));
@@ -1010,13 +1107,15 @@ function stTxt(i){if(!room.st)return'';if(envSilent(room))return environmentStat
     if(dmS)ex2.push(tip('⚔',`傷害${dmS>0?'+':''}${Math.round(dmS*100)}%`,'造成的傷害倍率變化，按顯示百分比計算。'));if(rdS)ex2.push(tip('🛡',`受傷-${Math.round(rdS*100)}%`,'受到傷害依顯示比例減少。'));if(fx.some(x=>x.k==='ns'))ex2.push(tip('🚫','強壯無效','強壯層數在此效果期間不會提供點數。'));
     const AA=CHARS[c]&&CHARS[c].arts;if(st.artOn&&AA){const a=AA.find(x=>x.id===st.art);if(a)ex2.push(tip('✨',`戰技【${(shinActive(st)&&a.n2)||a.n}】本回合生效`,'本回合生效中的角色戰技效果。'))}
     if(ex2.length)o.push(ex2.join('　'))}
+  if(c==='drunk'){o.push(tip('🍶','小酌×'+(st.drunkSip||0),'1層守護1；2／4層各加1暗牌槽；3層強壯1；每階段累積'));if(st.drunkCd>0)o.push(tip('⏳','酌酒冷卻','下次自身上場回合不能勾選酌酒，紅心回復>6仍可飲酒'));if(drunkAwake(st))o.push(tip('✨','覺醒'+(st.drunkAwake===-1?'・永久':'×'+st.drunkAwake),'強壯1、守護1，看見全場所有暗牌，優先於爛醉'));else if(st.drunkAwakePending)o.push(tip('✨','下次覺醒','下次自身上場回合取得覺醒'));if(st.drunkSip>=6)o.push(tip('🥴','爛醉','所有牌面隱藏；額外強壯'+drunkExtra(st)+'、易損'+drunkExtra(st)))}
+  if(c==='xichn'){const a=xichnStages(st);o.push(tip('🌱',`切磋琢春 ${a.join('／')}`,`威力、紅心治療、防護、生命路線階段，上限各6；自身紅心治療${xichnHealBonus(st)>=0?'+':''}${xichnHealBonus(st)}，生命倍率${(70+10*a[3])/100}。`));o.push(tip('⌛',`待×${st.xichnWait||0}`, '後備且玩家參戰的回合結束累積，登場消耗；一次固定傷害最多3點，不受威力增減影響，5層對群，單一敵人翻倍。'));o.push(tip('🌿',`余桓${st.xichnYuhuanUsed?'已使用':'可用'}`, '有可上場後備時，非斬殺傷害將生命降至50%以下則保留50%並隨機免費換人，每場一次。'))}
   if(c==='yoshi'){
     if(st.ketsuen)o.push(tip('🩸','血缘【けつえん】','獲得被動【血缘】：天殺不再消除自身手牌與卡牌槽。'));
     if(st.yoshiCd>0)o.push(tip('⏳','天殺冷卻','天殺冷卻中，下回合方可使用。'));
   }
-  room.seats.forEach((_,m)=>{if(room.chars[m]==='mat'&&room.st[m].rv&&room.st[m].rv[i])o.push(tip('🎯',`復仇對象×${room.st[m].rv[i]}`,'馬蒂亞斯對你造成傷害時，額外增加此層數的傷害。'))});
+  Object.entries(st.fingerRevenge||{}).forEach(([side])=>{const n=revengeStacks(room,+side,st);if(n)o.push(tip('🎯',`復仇對象×${n}`,`受到玩家${+side+1}方中指成員的非固定傷害時，額外增加${n}點傷害。`))});
   return o.length?`<div class="mut">${o.join('　')}</div>`:''}
-const characterMaxHp=(r,i,c,s0)=>r.silentMax?r.silentMax[i]:Math.max(1,(c==='leoc'?5:Math.round(r.cfg.hp*(c==='san'||c==='nut'?1.2:1)*(r.cfg.boss&&i!==1?1.5:1)*(c==='lucio'&&s0?.lucioDespair?0.8:1)))-((s0&&s0.mdec)||0)+(c==='ring'&&s0&&s0.ringAesthetic?(s0.lm||0):0));
+const characterMaxHp=(r,i,c,s0)=>r.silentMax?r.silentMax[i]:Math.max(1,(c==='leoc'?5:(c==='xichn'?Math.ceil(r.cfg.hp*(70+10*xichnStages(s0||{})[3])/100*(r.cfg.boss&&i!==1?1.5:1)):Math.round(r.cfg.hp*(c==='san'||c==='nut'?1.2:1)*(r.cfg.boss&&i!==1?1.5:1)*(c==='lucio'&&s0?.lucioDespair?0.8:1))))-((s0&&s0.mdec)||0)+(c==='ring'&&s0&&s0.ringAesthetic?(s0.lm||0):0));
 const maxHp=i=>characterMaxHp(room,i,room.chars&&room.chars[i],room.st&&room.st[i]);
 const AUDIO_VOLUME_KEY='d25-audio-volumes';
 const validAudioLevel=(value,fallback)=>typeof value==='number'&&Number.isFinite(value)?Math.min(100,Math.max(0,value)):fallback;
@@ -1029,7 +1128,7 @@ const D25_BGM=Object.fromEntries(Object.entries(CHARS).filter(([k,c])=>c.d25Skil
 const D25_BGM_DONE=new Set();
 /* 校正值預先量測，從第一次播放即生效；保留原始素材。 */
 /* AUDIO_LEVELS_START */
-const AUDIO_LEVELS={"assets/audio/sfx/characters/attack_bamboo.mp3":{"gain":0.444324},"assets/audio/sfx/characters/attack_card_ish.mp3":{"gain":0.403506},"assets/audio/sfx/characters/attack_dihui.mp3":{"gain":0.567022},"assets/audio/sfx/characters/attack_estelle.mp3":{"gain":0.848203},"assets/audio/sfx/weapons/attack_gun_classic.mp3":{"gain":0.987416,"src":"assets/audio/normalized/attack_gun_classic.mp3"},"assets/audio/sfx/weapons/attack_gun_ghost.mp3":{"gain":0.985372,"src":"assets/audio/normalized/attack_gun_ghost.mp3"},"assets/audio/sfx/weapons/attack_gun_guardian.mp3":{"gain":0.990946,"src":"assets/audio/normalized/attack_gun_guardian.mp3"},"assets/audio/sfx/weapons/attack_gun_judge.mp3":{"gain":0.787227},"assets/audio/sfx/weapons/attack_gun_marshal.mp3":{"gain":0.990604,"src":"assets/audio/normalized/attack_gun_marshal.mp3"},"assets/audio/sfx/weapons/attack_gun_odin.mp3":{"gain":0.744561},"assets/audio/sfx/weapons/attack_gun_operator.mp3":{"gain":0.898566},"assets/audio/sfx/weapons/attack_gun_phantom.mp3":{"gain":0.92619},"assets/audio/sfx/weapons/attack_gun_sheriff.mp3":{"gain":0.989806,"src":"assets/audio/normalized/attack_gun_sheriff.mp3"},"assets/audio/sfx/weapons/attack_gun_shorty.mp3":{"gain":0.980731},"assets/audio/sfx/weapons/attack_gun_spectre.mp3":{"gain":0.982992,"src":"assets/audio/normalized/attack_gun_spectre.mp3"},"assets/audio/sfx/weapons/attack_gun_vandal.mp3":{"gain":0.63797},"assets/audio/sfx/characters/attack_heathcliff.mp3":{"gain":0.536661},"assets/audio/sfx/characters/attack_jia_qiu.mp3":{"gain":0.413143},"assets/audio/sfx/characters/attack_lei.mp3":{"gain":0.372177},"assets/audio/sfx/characters/attack_leo.mp3":{"gain":0.704125},"assets/audio/sfx/characters/attack_mat.mp3":{"gain":0.990604,"src":"assets/audio/normalized/attack_mat.mp3"},"assets/audio/sfx/characters/attack_moses.mp3":{"gain":0.432514},"assets/audio/sfx/characters/attack_rean.mp3":{"gain":0.412667},"assets/audio/sfx/characters/attack_rien.mp3":{"gain":0.424326},"assets/audio/sfx/characters/attack_ring.mp3":{"gain":0.403831},"assets/audio/sfx/characters/attack_rufo.mp3":{"gain":0.582908},"assets/audio/sfx/characters/attack_san.mp3":{"gain":0.993116},"assets/audio/sfx/characters/attack_shi_faust.mp3":{"gain":0.439896},"assets/audio/sfx/characters/attack_tkt.mp3":{"gain":0.39414},"assets/audio/sfx/characters/attack_umb.mp3":{"gain":0.988325,"src":"assets/audio/normalized/attack_umb.mp3"},"assets/audio/sfx/characters/attack_val.mp3":{"gain":0.787771},"assets/audio/sfx/characters/attack_verg.mp3":{"gain":0.603045},"assets/audio/sfx/characters/attack_yisang.mp3":{"gain":0.625317},"assets/audio/sfx/characters/attack_yoshi.mp3":{"gain":0.429833},"assets/audio/sfx/characters/attack_zilu.mp3":{"gain":0.470869},"assets/audio/bgm/ultimate/bambooex.mp3":{"gain":0.323221},"assets/audio/bgm/ultimate/bugex.mp3":{"gain":0.595114},"assets/audio/bgm/ultimate/cardex.mp3":{"gain":0.659781},"assets/audio/bgm/ultimate/dihuiex.mp3":{"gain":0.626542},"assets/audio/bgm/battle/enforcer.mp3":{"gain":0.700084},"assets/audio/bgm/ultimate/estelleex.mp3":{"gain":0.5392},"assets/audio/bgm/ultimate/heathcliffex.mp3":{"gain":0.518621},"assets/audio/bgm/battle/jia_qiu.mp3":{"gain":0.361576},"assets/audio/bgm/ultimate/leiex.mp3":{"gain":0.711377},"assets/audio/bgm/ultimate/matex.mp3":{"gain":0.655466},"assets/audio/bgm/ultimate/mosesex.mp3":{"gain":0.655466},"assets/audio/bgm/ultimate/reanex.mp3":{"gain":0.490174},"assets/audio/bgm/battle/red_god.mp3":{"gain":0.340957},"assets/audio/bgm/ultimate/rienex.mp3":{"gain":0.566435},"assets/audio/bgm/ultimate/ringex.mp3":{"gain":0.646696},"assets/audio/bgm/ultimate/rufoex.mp3":{"gain":0.282651},"assets/audio/bgm/ultimate/sanex.mp3":{"gain":0.754484},"assets/audio/bgm/ultimate/shi_faustex.mp3":{"gain":0.88369},"assets/audio/bgm/battle/silverwill.mp3":{"gain":0.549351},"assets/audio/bgm/ultimate/tktex.mp3":{"gain":0.306126},"assets/audio/bgm/ultimate/umbex.mp3":{"gain":0.842073},"assets/audio/bgm/battle/verg.mp3":{"gain":0.381681},"assets/audio/bgm/battle/verg2.mp3":{"gain":0.356739},"assets/audio/bgm/ultimate/yisangex.mp3":{"gain":0.625749},"assets/audio/bgm/ultimate/yoshiex.mp3":{"gain":0.678969},"assets/audio/sfx/characters/attack_firefu.mp3":{"gain":0.563248},"assets/audio/sfx/characters/attack_fire2.mp3":{"gain":0.67811},"assets/audio/sfx/characters/attack_firefu3.mp3":{"gain":0.353102},"assets/audio/sfx/characters/attack_lucio.mp3":{"gain":0.594155},"assets/audio/bgm/ultimate/bgm.mp3":{"gain":0.643132},"assets/audio/bgm/battle/random/bgm.mp3":{"gain":0.409921},"assets/audio/bgm/battle/random/\u4ed9\u4fb6\u5bae \u54ea\u5412\u4ee4 \u9f8d\u904a\u6dfa\u6c34 (Xian Lv Gong Ne Zha Ling Long You Qi) - tamhowai 000.mp3":{"gain":0.448023},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 09 \u8d66\u53ec\u4e7e\u5764\u82f1\u96c4\u4ee4 Gathering of the Brave    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.320848},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 11 \u50b3\u8aaa\u4e4b\u4e0b Unsung Below    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.397375},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 12 \u6700\u5d0e\u5d87\u7684\u8def The Most Treacherous Path    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.490851},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 13 \u5343\u91cc\u4e0d\u7559\u884c Ever Onward    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.382957}};
+const AUDIO_LEVELS={"assets/audio/sfx/characters/attack_bamboo.mp3":{"gain":0.444324},"assets/audio/sfx/characters/attack_card_ish.mp3":{"gain":0.403506},"assets/audio/sfx/characters/attack_dihui.mp3":{"gain":0.567022},"assets/audio/sfx/characters/attack_estelle.mp3":{"gain":0.848203},"assets/audio/sfx/weapons/attack_gun_classic.mp3":{"gain":0.987416,"src":"assets/audio/normalized/attack_gun_classic.mp3"},"assets/audio/sfx/weapons/attack_gun_ghost.mp3":{"gain":0.985372,"src":"assets/audio/normalized/attack_gun_ghost.mp3"},"assets/audio/sfx/weapons/attack_gun_guardian.mp3":{"gain":0.990946,"src":"assets/audio/normalized/attack_gun_guardian.mp3"},"assets/audio/sfx/weapons/attack_gun_judge.mp3":{"gain":0.787227},"assets/audio/sfx/weapons/attack_gun_marshal.mp3":{"gain":0.990604,"src":"assets/audio/normalized/attack_gun_marshal.mp3"},"assets/audio/sfx/weapons/attack_gun_odin.mp3":{"gain":0.744561},"assets/audio/sfx/weapons/attack_gun_operator.mp3":{"gain":0.898566},"assets/audio/sfx/weapons/attack_gun_phantom.mp3":{"gain":0.92619},"assets/audio/sfx/weapons/attack_gun_sheriff.mp3":{"gain":0.989806,"src":"assets/audio/normalized/attack_gun_sheriff.mp3"},"assets/audio/sfx/weapons/attack_gun_shorty.mp3":{"gain":0.980731},"assets/audio/sfx/weapons/attack_gun_spectre.mp3":{"gain":0.982992,"src":"assets/audio/normalized/attack_gun_spectre.mp3"},"assets/audio/sfx/weapons/attack_gun_vandal.mp3":{"gain":0.63797},"assets/audio/sfx/characters/attack_heathcliff.mp3":{"gain":0.536661},"assets/audio/sfx/characters/attack_jia_qiu.mp3":{"gain":0.413143},"assets/audio/sfx/characters/attack_lei.mp3":{"gain":0.372177},"assets/audio/sfx/characters/attack_leo.mp3":{"gain":0.704125},"assets/audio/sfx/characters/attack_mat.mp3":{"gain":0.990604,"src":"assets/audio/normalized/attack_mat.mp3"},"assets/audio/sfx/characters/attack_moses.mp3":{"gain":0.432514},"assets/audio/sfx/characters/attack_rean.mp3":{"gain":0.412667},"assets/audio/sfx/characters/attack_rien.mp3":{"gain":0.424326},"assets/audio/sfx/characters/attack_ring.mp3":{"gain":0.403831},"assets/audio/sfx/characters/attack_rufo.mp3":{"gain":0.582908},"assets/audio/sfx/characters/attack_san.mp3":{"gain":0.993116},"assets/audio/sfx/characters/attack_shi_faust.mp3":{"gain":0.439896},"assets/audio/sfx/characters/attack_tkt.mp3":{"gain":0.39414},"assets/audio/sfx/characters/attack_umb.mp3":{"gain":0.988325,"src":"assets/audio/normalized/attack_umb.mp3"},"assets/audio/sfx/characters/attack_val.mp3":{"gain":0.787771},"assets/audio/sfx/characters/attack_verg.mp3":{"gain":0.603045},"assets/audio/sfx/characters/attack_yisang.mp3":{"gain":0.625317},"assets/audio/sfx/characters/attack_yoshi.mp3":{"gain":0.429833},"assets/audio/sfx/characters/attack_zilu.mp3":{"gain":0.470869},"assets/audio/bgm/ultimate/bambooex.mp3":{"gain":0.323221},"assets/audio/bgm/ultimate/bugex.mp3":{"gain":0.595114},"assets/audio/bgm/ultimate/cardex.mp3":{"gain":0.659781},"assets/audio/bgm/ultimate/dihuiex.mp3":{"gain":0.626542},"assets/audio/bgm/battle/enforcer.mp3":{"gain":0.700084},"assets/audio/bgm/ultimate/estelleex.mp3":{"gain":0.5392},"assets/audio/bgm/ultimate/heathcliffex.mp3":{"gain":0.518621},"assets/audio/bgm/battle/jia_qiu.mp3":{"gain":0.361576},"assets/audio/bgm/ultimate/leiex.mp3":{"gain":0.711377},"assets/audio/bgm/ultimate/matex.mp3":{"gain":0.655466},"assets/audio/bgm/ultimate/mosesex.mp3":{"gain":0.655466},"assets/audio/bgm/ultimate/reanex.mp3":{"gain":0.490174},"assets/audio/bgm/battle/red_god.mp3":{"gain":0.340957},"assets/audio/bgm/ultimate/rienex.mp3":{"gain":0.566435},"assets/audio/bgm/ultimate/ringex.mp3":{"gain":0.646696},"assets/audio/bgm/ultimate/rufoex.mp3":{"gain":0.282651},"assets/audio/bgm/ultimate/sanex.mp3":{"gain":0.754484},"assets/audio/bgm/ultimate/shi_faustex.mp3":{"gain":0.88369},"assets/audio/bgm/battle/silverwill.mp3":{"gain":0.549351},"assets/audio/bgm/ultimate/tktex.mp3":{"gain":0.306126},"assets/audio/bgm/ultimate/umbex.mp3":{"gain":0.842073},"assets/audio/bgm/battle/verg.mp3":{"gain":0.381681},"assets/audio/bgm/battle/verg2.mp3":{"gain":0.356739},"assets/audio/bgm/ultimate/yisangex.mp3":{"gain":0.625749},"assets/audio/bgm/ultimate/yoshiex.mp3":{"gain":0.678969},"assets/audio/sfx/characters/attack_firefu.mp3":{"gain":0.563248},"assets/audio/sfx/characters/attack_fire2.mp3":{"gain":0.67811},"assets/audio/sfx/characters/attack_firefu3.mp3":{"gain":0.353102},"assets/audio/sfx/characters/attack_lucio.mp3":{"gain":0.594155},"assets/audio/bgm/ultimate/bgm.mp3":{"gain":0.643132},"assets/audio/bgm/battle/random/bgm.mp3":{"gain":0.409921},"assets/audio/bgm/battle/random/\u4ed9\u4fb6\u5bae \u54ea\u5412\u4ee4 \u9f8d\u904a\u6dfa\u6c34 (Xian Lv Gong Ne Zha Ling Long You Qi) - tamhowai 000.mp3":{"gain":0.448023},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 09 \u8d66\u53ec\u4e7e\u5764\u82f1\u96c4\u4ee4 Gathering of the Brave    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.320848},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 11 \u50b3\u8aaa\u4e4b\u4e0b Unsung Below    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.397375},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 12 \u6700\u5d0e\u5d87\u7684\u8def The Most Treacherous Path    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.490851},"assets/audio/bgm/battle/random/\u6d3b\u4fe0\u50b3\u539f\u8072\u5e36 13 \u5343\u91cc\u4e0d\u7559\u884c Ever Onward    OST BGM \u914d\u6a02 - \u524d\u5fcd\u8c46\u98a8\u96f2.mp3":{"gain":0.382957},"assets/audio/sfx/characters/attack_sad1.mp3.mp3":{"gain":0.541128},"assets/audio/sfx/characters/attack_sad2.mp3.mp3":{"gain":0.568984},"assets/audio/sfx/characters/attack_sad3.mp3.mp3":{"gain":0.332162},"assets/audio/sfx/characters/attack_sad4.mp3.mp3":{"gain":0.331589},"assets/audio/sfx/characters/attack_lkd1.MP3":{"gain":0.370126},"assets/audio/sfx/characters/attack_lkd2.MP3":{"gain":0.397786},"assets/audio/sfx/characters/attack_lkd3.MP3":{"gain":0.547205},"assets/audio/sfx/characters/attack_lkd4.MP3":{"gain":0.37424},"assets/audio/bgm/ultimate/lkdex.mp3":{"gain":0.303005},"assets/audio/sfx/characters/attack_kira1.mp3.MP3":{"gain":0.469732},"assets/audio/sfx/characters/attack_kira2.mp3.MP3":{"gain":0.540319},"assets/audio/sfx/characters/attack_kira3.mp3.MP3":{"gain":0.443149},"assets/audio/sfx/characters/attack_kira4.mp3.MP3":{"gain":0.416869},"assets/audio/bgm/ultimate/kiraex.mp3":{"gain":0.330941},"assets/audio/sfx/characters/attack_xichun.mp3":{"gain":0.578895},"assets/audio/sfx/characters/attack_drunk.mp3":{"gain":0.949074},"assets/audio/sfx/characters/drink_drunk.mp3":{"gain":0.987643,"src":"assets/audio/normalized/drink_drunk.mp3"}};
 /* AUDIO_LEVELS_END */
 const LOUD={g:Object.fromEntries(Object.entries(AUDIO_LEVELS).map(([u,x])=>[u,x.gain]))};
 const audGain=u=>Number.isFinite(LOUD.g[u])?Math.min(1,Math.max(0,LOUD.g[u])):1;
@@ -1045,7 +1144,7 @@ function playSfxAudio(file,fallback){
 function sfx(n){playSfxAudio('assets/audio/sfx/system/sfx_'+n+'.mp3')}
 function applySynthVolume(s){const now=s.ctx.currentTime,left=s.end-now;s.gain.gain.cancelScheduledValues(now);if(!sfxOn||sfxVol<=0||left<=0){s.gain.gain.setValueAtTime(0,now);return}const peak=sfxVol*s.base,elapsed=Math.max(0,now-s.start)/(s.end-s.start);s.gain.gain.setValueAtTime(Math.max(1e-5,peak*Math.pow(1e-4,elapsed)),now);s.gain.gain.exponentialRampToValueAtTime(Math.max(1e-5,peak*1e-4),s.end)}
 function updateSfxVolume(){activeSfx.forEach((file,a)=>{a.volume=sfxOn?sfxVol*audGain(file):0});activeSynth.forEach(applySynthVolume)}
-function attackSfx(charId,weapon,customFile){if(!sfxOn)return;const val=isValorant(charId),id=val?weapon||'default':(charId&&CHARS[charId]&&CHARS[charId].sfx)||charId||'default',file=customFile||(charId==='firefu'?firefuAttackFile(room?.st?.[room.chars?.indexOf('firefu')]):null)||(val?VALORANT_GUNS[weapon]?.sfx:'assets/audio/sfx/characters/attack_'+id+'.mp3');
+function attackSfx(charId,weapon,customFile){if(!sfxOn)return;const val=isValorant(charId),id=val?weapon||'default':(charId&&CHARS[charId]&&CHARS[charId].sfx)||charId||'default',file=customFile||(charId==='kira'?kiraSoundFile(1):null)||(charId==='lkd'?lkdSoundFile(1):null)||(charId==='sad'?sadSoundFile(1):null)||(charId==='firefu'?firefuAttackFile(room?.st?.[room.chars?.indexOf('firefu')]):null)||(val?VALORANT_GUNS[weapon]?.sfx:'assets/audio/sfx/characters/attack_'+id+'.mp3');
   const synth=()=>{if(!sfxOn||sfxVol<=0)return;try{const AC=window.AudioContext||window.webkitAudioContext;if(!AC)return;const ctx=new AC(),cfg={yoshi:[180,'sawtooth',.18],umb:[75,'square',.28],val:[620,'triangle',.16],san:[330,'sine',.22],mat:[240,'square',.2],rien:[520,'triangle',.18],ring:[150,'sawtooth',.24],nut:[110,'square',.2],rean:[700,'sawtooth',.14],shi_faust:[560,'triangle',.15],heathcliff:[95,'sawtooth',.3],default:[440,'triangle',.15]}[id]||[440,'triangle',.15],osc=ctx.createOscillator(),gain=ctx.createGain(),now=ctx.currentTime,voice={ctx,gain,start:now,end:now+cfg[2],base:.28};osc.type=cfg[1];osc.frequency.setValueAtTime(cfg[0],now);osc.frequency.exponentialRampToValueAtTime(Math.max(40,cfg[0]*.42),now+cfg[2]);osc.connect(gain);gain.connect(ctx.destination);activeSynth.add(voice);applySynthVolume(voice);osc.start(now);osc.stop(now+cfg[2]);osc.onended=()=>{activeSynth.delete(voice);ctx.close()}}catch(e){}};
   if(file)playSfxAudio(file,synth);else synth()}
 function updAud(){document.getElementById('b1').textContent='🎵 BGM：'+(bgmOn?'開':'關');document.getElementById('b2').textContent='🔊 音效：'+(sfxOn?'開':'關');[['bgm',bgmVol],['sfx',sfxVol]].forEach(([kind,v])=>{const input=document.getElementById(kind+'Volume'),output=document.getElementById(kind+'VolumeValue');if(input)input.value=Math.round(v*100);if(output)output.textContent=Math.round(v*100)+'%'})}
@@ -1120,7 +1219,7 @@ function syncBgm(){
   }
   if(t||d25Bgm)playBgmAudio();
 }
-function playFx(L){const combat=scheduleCombatFx(L.combat),healing=scheduleHealingFx(L.healing,combat);combatFx.pending.push(...combat);healingFx.pending.push(...healing);damageFx.pending.push(...(L.damage||[]).map((e,n)=>{if(e.environment==='allIn')return{...e,delay:Math.max(300,...combat.map(c=>c.delay+320),...healing.map(h=>h.delay+600))};const hit=combat.find(c=>c.damageIndex===n);return hit?{...e,delay:hit.delay+160}:e}),...healing.map(e=>({...e,healing:true})));(L.hits||[]).forEach(i=>{const k=(L.chars&&L.chars[i])||(room.chars&&room.chars[i]);attackSfx(k||'default',L.weapons?L.weapons[i]:room.st?.[i]?.gun,L.firefuSounds?.[i])});if((L.log||[]).some(x=>x.includes('發動')))sfx('skill')}
+function playFx(L){const cues=L.soundCues||[],combat=scheduleCombatFx(L.combat),healing=scheduleHealingFx(L.healing,combat);combatFx.pending.push(...combat);healingFx.pending.push(...healing);damageFx.pending.push(...(L.damage||[]).map((e,n)=>{if(e.environment==='allIn')return{...e,delay:Math.max(300,...combat.map(c=>c.delay+320),...healing.map(h=>h.delay+600))};const hit=combat.find(c=>c.damageIndex===n);return hit?{...e,delay:hit.delay+160}:e}),...healing.map(e=>({...e,healing:true})));(L.hits||[]).forEach(i=>{const k=(L.chars&&L.chars[i])||(room.chars&&room.chars[i]);if(cues.some(e=>e.seat===i&&(e.replaceAttack||k==='sad'&&e.file!==sadSoundFile(2))))return;attackSfx(k||'default',L.weapons?L.weapons[i]:room.st?.[i]?.gun,L.firefuSounds?.[i])});cues.forEach(e=>playSfxAudio(e.file));if((L.log||[]).some(x=>x.includes('發動')))sfx('skill')}
 function d25AuraOf(i){
   const d=room&&room.d25&&room.d25[i];if(!d||!d.used)return null;
   const a=d.aura,e=room.instantFx;
@@ -1223,6 +1322,7 @@ function triggerD25(sid){
   if(battleObservationActive())return;
   const s = d25PopupSeat();
   if (!room || isoPending() || valorantShopPending() || mirrorPending() || envSilent(room) || s < 0 || d25DrawPending() || environmentTradePending()) return;
+  if(!d25SkillAvailable(room,s,sid))return;
   dismissD25Banner();
   db.doc(`rooms/${code}/moves/u25_${room.round}_${s}`).set({ skill: sid });
 }
@@ -1235,7 +1335,7 @@ function perfectDuelBannerUI(){
   if(lastSeenD25Round!==room.round||lastSeenD25Key!==bannerKey){lastSeenD25Round=room.round;lastSeenD25Key=bannerKey;d25BannerDismissed=false;try{sfx('skill')}catch(e){}if(!canUseNow)setTimeout(()=>{if(lastSeenD25Key===bannerKey&&!battleObservationActive())dismissD25Banner()},5000)}
   if(d25BannerDismissed)return'';
   const c=room.chars&&room.chars[caster],C=CHARS[c],art=imgK(c),charSkills=C&&C.d25Skills||[{id:1,name:'崩滅之刃',type:'進攻型',desc:'對敵方造成15點直接傷害'},{id:2,name:'天命之泉',type:'輔助型',desc:'自身回復15點生命'}];
-  return presentBattlePopup(`<div id="pdModal" class="perfect-duel-modal combat-ultimate" role="dialog" aria-modal="true" aria-labelledby="pdTitle" onkeydown="d25DialogKey(event)" onclick="${canUseNow?'':'dismissD25Banner()'}"><div class="pd-content" onclick="event.stopPropagation()"><div class="ultimate-portrait"><img alt="${esc(C?C.n:'決鬥者')}" data-k="${art}" data-p="left" data-s="0" src="${charArtSrc(art,'left')}" onerror="imgFb(this)"><div class="ultimate-owner">${C?esc(C.n)+' · ':''}${esc(room.d25Banner.name)}</div></div><div class="ultimate-body"><button type="button" class="ultimate-close" aria-label="不發動絕技，關閉彈窗" onclick="dismissD25Banner()">×</button><div class="pd-sub">二十五之刻 · 25 / 25</div><h2 id="pdTitle" class="pd-title">完美決鬥</h2><div class="pd-desc"><b>${esc(room.d25Banner.name)}</b> 的二十五之刻剛好集滿25點。<br>${canUseNow?'選擇一項專屬絕技，立即發動。':'全場唯一的絕技資格已達成。'}</div>${canUseNow?`<div class="ultimate-options">${charSkills.map((sk,idx)=>`<button type="button" class="pd-btn" onclick="triggerD25(${sk.id||idx+1})"><span class="ultimate-type ${sk.type==='輔助型'?'support':''}">${esc(sk.type||(idx?'輔助型':'進攻型'))}</span><b>${esc(sk.name)}</b><span class="ultimate-effect">${esc(sk.desc)}</span><span class="ultimate-activate">發動絕技 →</span></button>`).join('')}</div><div class="ultimate-footer"><button type="button" class="ultimate-skip" onclick="dismissD25Banner()">不發動絕技，直接出牌</button><span class="ultimate-note">絕技僅限於此彈窗出現時發動，關閉後出牌階段將無法再使用。</span></div>`:'<button type="button" class="pd-btn pd-enter" onclick="dismissD25Banner()">進入決鬥 →</button>'}</div></div></div>`,'ultimate');
+  return presentBattlePopup(`<div id="pdModal" class="perfect-duel-modal combat-ultimate" role="dialog" aria-modal="true" aria-labelledby="pdTitle" onkeydown="d25DialogKey(event)" onclick="${canUseNow?'':'dismissD25Banner()'}"><div class="pd-content" onclick="event.stopPropagation()"><div class="ultimate-portrait"><img alt="${esc(C?C.n:'決鬥者')}" data-k="${art}" data-p="left" data-s="0" src="${charArtSrc(art,'left')}" onerror="imgFb(this)"><div class="ultimate-owner">${C?esc(C.n)+' · ':''}${esc(room.d25Banner.name)}</div></div><div class="ultimate-body"><button type="button" class="ultimate-close" aria-label="不發動絕技，關閉彈窗" onclick="dismissD25Banner()">×</button><div class="pd-sub">二十五之刻 · 25 / 25</div><h2 id="pdTitle" class="pd-title">完美決鬥</h2><div class="pd-desc"><b>${esc(room.d25Banner.name)}</b> 的二十五之刻剛好集滿25點。<br>${canUseNow?'選擇一項專屬絕技，立即發動。':'全場唯一的絕技資格已達成。'}</div>${canUseNow?`<div class="ultimate-options">${charSkills.map((sk,idx)=>`<button type="button" class="pd-btn" ${d25SkillAvailable(room,caster,sk.id||idx+1)?'':'disabled'} onclick="triggerD25(${sk.id||idx+1})"><span class="ultimate-type ${sk.type==='輔助型'?'support':''}">${esc(sk.type||(idx?'輔助型':'進攻型'))}</span><b>${esc(sk.name)}</b><span class="ultimate-effect">${esc(sk.desc)}</span><span class="ultimate-activate">發動絕技 →</span></button>`).join('')}</div><div class="ultimate-footer"><button type="button" class="ultimate-skip" onclick="dismissD25Banner()">不發動絕技，直接出牌</button><span class="ultimate-note">絕技僅限於此彈窗出現時發動，關閉後出牌階段將無法再使用。</span></div>`:'<button type="button" class="pd-btn pd-enter" onclick="dismissD25Banner()">進入決鬥 →</button>'}</div></div></div>`,'ultimate');
 }
 function focusD25Dialog(){
   const modal=battleObservationActive()?null:battleConfirm?document.getElementById('battleConfirmModal'):mirrorPending()?document.getElementById('mirrorModal'):document.getElementById('pdModal');if(document.body)document.body.classList.toggle('d25-dialog-open',!!modal);
@@ -1270,7 +1370,7 @@ function returnBattlePopup(){battleObservationKey='';render();focusD25Dialog()}
 function popupEyeUI(){return`<button type="button" class="popup-eye" aria-label="查看戰場，保留目前選擇" title="查看戰場" onclick="event.stopPropagation();observeBattlePopup()">${popupEyeIcon()}</button>`}
 function presentBattlePopup(html,kind){const P=activeBattlePopup();if(P?.kind===kind&&battleObservationActive())return'';return html.replace(/(<div class="(?:pd-content|d25-draw-content d25-contest-content|mirror-content|battle-confirm-content)"[^>]*>)/,'$1'+popupEyeUI())}
 function battleObservationUI(){const P=activeBattlePopup();if(!battleObservationActive())return'';return`<aside class="battle-observation-bar" role="status"><div><b>正在查看戰場</b><small>保留${esc(P.title)}；查看不會更改原本的倒數規則。</small></div><button id="observationReturn" type="button" class="observation-return" onclick="returnBattlePopup()">${popupEyeIcon()}返回${esc(P.title)}</button></aside>`}
-function observationHandUI(s){return s>=0?`<div>你的手牌（僅供查看）</div><div class="observation-hand">${(room.hands[s]||[]).map(c=>chip(c,s)).join('')}${(s===rd()?privateSunCards:[]).map(c=>chip(c.card,s)).join('')}</div>`:'<p>查看公開手牌、狀態與戰鬥紀錄。</p>'}
+function observationHandUI(s){return s>=0?`<div>你的手牌（僅供查看）</div><div class="observation-hand">${(room.hands[s]||[]).map(c=>chip(c,s,room.up[s].includes(c))).join('')}${(s===rd()?privateSunCards:[]).map(c=>chip(c.card,s,publicTemporaryCards(room,s).some(x=>x.id===c.id))).join('')}</div>`:'<p>查看公開手牌、狀態與戰鬥紀錄。</p>'}
 function showBattleConfirm(title,message,onConfirm){if(!room||battleObservationActive())return;battleConfirm={id:++battleConfirmSeq,title,message,onConfirm,code,round:room.round,roundBase:room.roundBase,phase:room.phase,seat:rd()};battleObservationKey='';render()}
 function closeBattleConfirm(){battleConfirm=null;battleObservationKey='';render()}
 function acceptBattleConfirm(){const C=battleConfirm;if(!C||battleObservationActive())return;battleConfirm=null;battleObservationKey='';if(room?.status==='playing'&&code===C.code&&room.round===C.round&&room.roundBase===C.roundBase&&room.phase===C.phase&&rd()===C.seat)C.onConfirm();render()}
@@ -1337,17 +1437,18 @@ const phase=room.status!=='playing'?'對戰結束':valorantShopPending()?'購買
   const slot=(i,sideIndex)=>{
     const m=room.phase==='play'&&room.status==='playing'&&moves[room.round+'_'+i],oldSeat=lastPair&&lastPair[sideIndex]!==undefined?lastPair[sideIndex]:i,lc=L&&L.plays.find(p=>p.i===oldSeat);
     const label=m?'已出牌':lc&&lc.card?'上一回合':'等待出牌';
-    const face=m?'<div class="pc back" aria-label="已出牌，尚未揭曉">25</div>':lc&&lc.card?`<div class="pc ${lc.eff?'glow':'old'} ${RED[lc.card[0]]?'r':''}" title="${esc(room.seats[oldSeat].name)} 上回合：${cs(lc.card)}${lc.eff?'，效果已發動':'，效果未發動'}">${cardFace(lc.card)}</div>`:'<div class="pc empty"><span>等待出牌</span></div>';
+    const hiddenLast=lc&&lc.card&&!drunkCanSee(room,viewer,oldSeat,true);
+    const face=m?'<div class="pc back" aria-label="已出牌，尚未揭曉">25</div>':hiddenLast?'<div class="pc back" aria-label="牌面隱藏">🂠</div>':lc&&lc.card?`<div class="pc ${lc.eff?'glow':'old'} ${RED[lc.card[0]]?'r':''}" title="${esc(room.seats[oldSeat].name)} 上回合：${cs(lc.card)}${lc.eff?'，效果已發動':'，效果未發動'}">${cardFace(lc.card)}</div>`:'<div class="pc empty"><span>等待出牌</span></div>';
     return`<div class="clash-slot">${face}<small>${label}</small></div>`;
   };
   const side=(i,pos)=>{
     const k=room.chars[i],C=CHARS[k],hp=Math.max(0,room.hp[i]),maximum=maxHp(i),shield=room.st[i].shield||0;
-    const temporary=publicTemporaryCards(room,i),publicCards=(room.up[i]||[]).map(c=>chip(c,i)).join('')+temporary.map(c=>`<span title="公開的向日葵暫時手牌">${chip(c.card,i)}</span>`).join(''),hidden=Math.max(0,(room.hands[i]||[]).length+(i===viewer?privateSunCards.length:temporary.length)-(room.up[i]||[]).length-temporary.length);
+    const temporary=drunkTemporaryCards(i),publicCards=visibleHandUI(i),hidden=Math.max(0,(room.hands[i]||[]).length+(i===viewer?privateSunCards.length:temporary.length)-(room.up[i]||[]).length-temporary.length);
     const role=room.cfg.boss?(i===1?'Boss':'挑戰者'):i===viewer?'你':'對手';
     return`<section class="fighter ${hp<=0?'dead':''} ${i===viewer?'mine':'enemy'}"><div class="fighter-label"><span>玩家 ${String(i+1).padStart(2,'0')}</span><span class="fighter-role">${role}</span></div><div data-damage-target="${i}:${room.team?room.act[i]:-1}" class="art-wrap ${room.team?'v3':''} ${pos}" ondragover="event.preventDefault()" ondrop="dropSw(event,${i})">${resv(i,pos)}<img class="fighter-art ${pos}" alt="${esc(C?C.n:'角色')}" ${canCancel(i)?`onclick="cancelSw(${i})" title="點擊取消換人"`:''} data-k="${imgK(k,room.st[i])}" data-p="${pos}" data-s="0" src="${charArtSrc(imgK(k,room.st[i]),pos)}" onerror="imgFb(this)">${d25AuraUI(i)}${environmentTargetFxUI(i,room.team?room.act[i]:-1)}</div><div class="fighter-info"><div class="fighter-identity"><div><div class="fighter-name">${C?esc(C.n):'決鬥者'}</div><span class="fighter-owner">${esc(room.seats[i].name)}${i===viewer?'（你）':''}</span></div><span class="fighter-faction">${C?FAC[C.f]:''}</span></div><div class="vital-row"><span>生命</span><div class="fighter-hp" data-hptext="${i}">${hp} / ${maximum}</div></div>${healthBarUI(i,true)}${timeClockUI(i)}${shield?`<div class="shield-readout"><span>護盾</span><strong>${shield}</strong><div class="shield-meter"><i style="width:${Math.min(100,shield/maximum*100)}%"></i></div></div>`:''}${cpBar(i)}${combatStatusUI(i)}${teamInfo(i)}<div class="fighter-cards"><span>明牌</span>${publicCards||'<span>—</span>'}<span class="hand-count">暗牌 ${hidden} 張</span></div></div></section>`;
   };
   const notes=[...(room.sLog||[]),...(room.spin&&room.status==='playing'?[`${room.seats[room.spin.t].name} 的輪盤選中 ${room.seats[room.spin.pick].name}`]:[]),...(L?L.log:[])];
-  const record=notes.length?`<details class="table-record"><summary>戰鬥紀錄<span>${esc(notes[0].slice(0,62))}${notes[0].length>62?'…':''}</span></summary><div class="record-body">${notes.map(x=>`<div>${esc(x)}</div>`).join('')}</div></details>`:'';
+  const record=notes.length?`<details class="table-record"><summary>戰鬥紀錄<span>${esc(drunkLogText(notes[0]).slice(0,62))}${notes[0].length>62?'…':''}</span></summary><div class="record-body">${notes.map(x=>`<div>${esc(drunkLogText(x))}</div>`).join('')}</div></details>`:'';
   return`<div class="combat-shell ${environmentAtmosphere()?'env-atmosphere-'+environmentAtmosphere():''}"><div class="battlefield ${Q?'env-board-quake':''}" ${Q?`style="--quake-age:-${Math.max(0,Date.now()-Q.at)}ms"`:''}>${environmentBackdropUI()}${environmentFieldFxUI()}${environmentNoticeUI()}<header class="table-heading"><div class="table-brand-block"><div class="table-brand-line"><div class="table-brand">決鬥25點</div>${environmentUI()}</div><span class="table-mode">${mode} · ${room.cfg.open?'明牌模式':'暗牌模式'}</span></div><div class="round-label"><span>回合</span><b>${String(shownRound()).padStart(2,'0')}</b><span class="round-phase">${phase}</span></div></header>${side(pr[0],'left')}<div class="battle-core">${clock25PanelUI()}<div class="clash-eyebrow">${phase==='出牌階段'?'本回合交鋒':phase}</div><div class="battle-mid">${slot(pr[0],0)}<span class="versus">VS</span>${slot(pr[1],1)}</div><div class="clash-note">${room.status!=='playing'?'勝負已定':room.phase==='answer'?'等待回答，完成後繼續出牌':room.phase==='reveal'?'選擇保持暗牌的卡片，其餘公開':'雙方各選一張牌，揭曉後結算'}</div><div class="suit-guide"><span><b>♠</b>進攻</span><span><b>♣</b>干擾</span><span class="red"><b>♥</b>回復</span><span class="red"><b>♦</b>反擊</span></div></div>${side(pr[1],'right')}</div><div class="combat-actions"><div class="act">${act||''}</div></div>${record}</div>${battleConfirm?battleConfirmUI():mirrorPending()?mirrorChoiceUI():perfectDuelBannerUI()}`;
 }
 /* ---------- 規則 ---------- */
@@ -1515,10 +1616,11 @@ const tidyHp=n=>Math.round(n*1e6)/1e6;
 function tktHealth(hp,limit,s0={}){const unit=s0.tktUnit||Math.max(1,limit+(s0.mdec||0))/5,bars=hp>0?Math.min(5,Math.max(1,Math.ceil((hp-1e-7)/unit))):0;return{unit,bars,current:bars?tidyHp(hp-(bars-1)*unit):0,cap:tidyHp(Math.min(limit,bars*unit))}}
 function syncTktState(c,s0,hp,limit){if(c!=='tkt'||!s0)return;const H=tktHealth(hp,limit,s0);s0.tktUnit=H.unit;s0.tktBars=H.bars}
 function syncTktHealth(r){if(!r?.hp||!r.st)return r;r.seats.forEach((_,i)=>{syncTktState(r.chars[i],r.st[i],r.hp[i],characterMaxHp(r,i,r.chars[i],r.st[i]));if(r.team)r.team[i].forEach((m,k)=>{if(k===r.act[i]){if(m.c==='tkt'){m.st.tktUnit=r.st[i].tktUnit;m.st.tktBars=r.st[i].tktBars}}else syncTktState(m.c,m.st,m.hp,characterMaxHp(r,i,m.c,m.st))})});return r}
+function absorbShield(s0,amount){const before=Math.max(0,s0.shield||0),absorbed=Math.min(before,Math.max(0,amount));if(absorbed>0){s0.shield=tidyHp(before-absorbed);s0.shieldPersistent=tidyHp(Math.max(0,(s0.shieldPersistent||0)-absorbed))}return{before,absorbed,remaining:tidyHp(Math.max(0,amount-absorbed))}}
 function damagedHp(current,limit,amount,c,s0,log=[],name='時間殺人魔',prepared=false){
   if(!prepared&&current>0)amount=isoDamage(c,s0,amount,log,name);
   const finish=after=>{const lost=Math.max(0,Math.max(0,current)-Math.max(0,after));if(lost>0&&s0?.fx?.some(f=>f.k==='crystal'&&f.source==='environment')){const n=Math.min(5,lost);s0.shield=(s0.shield||0)+n;s0.shieldPersistent=(s0.shieldPersistent||0)+n;s0.envCrystalGained=(s0.envCrystalGained||0)+n;log.push(`💎【傷口結晶】${name} 受傷後獲得${n}點護盾`)}return after};
-  let after=current-amount;if(c!=='tkt'||!s0||s0.sealT>0||!(current>0)||!(amount>0))return finish(after);
+  let after=current-amount;if(c==='xichn'&&s0?.xichnCanExit&&!s0.xichnYuhuanUsed&&!(s0.sealT>0)&&current>0&&amount>0&&after<limit/2){after=Math.ceil(limit/2);s0.xichnYuhuanUsed=1;s0.xichnExitPending=1;log.push(`${name} 的【余桓】發動，本次生命固定為${after}（每場一次）`)}if(c!=='tkt'||!s0||s0.sealT>0||!(current>0)||!(amount>0))return finish(after);
   const H=tktHealth(current,limit,s0),floor=tidyHp((H.bars-1)*H.unit);
   if(after<=floor){const cleared=tidyHp(Math.max(0,floor-after));after=floor;log.push(`${name} 失去1條血條（剩${H.bars-1}/5）${cleared?`，清除${cleared}點溢出傷害`:''}`)}
   after=tidyHp(after);syncTktState(c,s0,after,limit);return finish(after);
@@ -1611,7 +1713,8 @@ function syncEnvironmentSunCards(){environmentEvents(room).filter(E=>['fallenCro
   Object.entries(hostSunCards).forEach(([seat,cards])=>{if(room.hp[seat]<=0)return;cards.forEach(c=>{if((c.environmentKeys||[]).includes(key)||c.environmentKey===key||c.expires<E.round)return;c.card=environmentCardTransform(E.id,c.card,E.ranks?.[seat]);c.environmentKeys=[...(c.environmentKeys||[]),key];c.environmentKey=key;if(test||room.seats[seat].id===uid){privateSunCards=privateSunCards.map(p=>p.id===c.id?{...c}:p)}else sendPrivateTo(room.seats[seat].id,{sunCardUpdate:{...c}})})});
 });}
 const publicTemporaryCards=(r,i)=>(r.env?.publicSun?.[i]||[]).filter(c=>c.expires>=r.round);
-const redrawCost=(r,i)=>Math.max(0,5*((r.rdw&&r.rdw[i]||0)+1)-(r.env&&r.env.supply[i]>0?5:0));
+const freeLkdRedraw=(r,i)=>r.chars[i]==='lkd'&&!envSilent(r)&&!(r.st[i].sealT>0)&&(r.st[i].lkdRedraws||0)>0;
+const redrawCost=(r,i)=>freeLkdRedraw(r,i)?0:Math.max(0,5*((r.rdw&&r.rdw[i]||0)+1)-(r.env&&r.env.supply[i]>0?5:0));
 function environmentMembers(r){const out=[];r.seats.forEach((_,i)=>{
   if(r.hp[i]>0)out.push({i,k:-1,c:r.chars[i],st:r.st[i],hp:r.hp[i],max:characterMaxHp(r,i,r.chars[i],r.st[i])});
   if(r.team)r.team[i].forEach((m,k)=>{if(k!==r.act[i]&&!m.dead&&m.hp>0)out.push({i,k,c:m.c,st:m.st,hp:m.hp,max:characterMaxHp(r,i,m.c,m.st)})});
@@ -1734,7 +1837,7 @@ function acceptMirrorChoice(cn,req){
 function mirrorChoiceUI(){if(!mirrorPending())return'';const Q=room.mirrorChoice,mine=rd()===Q.seat,title=Q.search?'鏡世界搜索':'鏡世界觀測';
   return presentBattlePopup(`<div id="mirrorModal" class="perfect-duel-modal mirror-modal" tabindex="-1" onkeydown="d25DialogKey(event)" role="dialog" aria-modal="true" aria-labelledby="mirrorTitle"><div class="mirror-content"><div class="mirror-heading"><img src="${charArtSrc('yisang','left')}" data-k="yisang" data-p="left" data-s="0" onerror="imgFb(this)" alt="李箱"><div><small>李箱 · 第${shownRound()}回合</small><h2 id="mirrorTitle">${title}</h2><p>${mine?Q.search?'從完整可用事件清單選擇一個鏡世界。':'從四個鏡世界中選擇一個額外事件。':`等待 ${esc(room.seats[Q.seat].name)} 選擇鏡世界…`}</p></div></div><div class="mirror-options">${Q.options.map(id=>`<button type="button" class="mirror-option" ${mine?'':'disabled'} onclick="chooseMirror('${id}')"><b>${ENV_EVENTS[id].icon} ${esc(ENV_EVENTS[id].n)}</b><span>${esc(ENV_EVENTS[id].d)}</span></button>`).join('')}</div><p class="mirror-note">選擇期間全員行動與倒數暫停。選定事件與原場地並存。</p></div></div>`,'mirror');
 }
-function beginRound(rm){if(isoPending(rm))return rm;rm=prepareValorantShop(rm);if(valorantShopPending(rm))return rm;return refreshTimeClocks(syncTktHealth(beginRoundState(rm)))}
+function beginRound(rm){if(rm.kiraRelays)rm={...rm,kiraRelays:rm.kiraRelays.filter(x=>x.round===rm.round),kiraNoPlay:Object.fromEntries(Object.entries(rm.kiraNoPlay||{}).filter(([i,round])=>round===rm.round))};if(isoPending(rm))return rm;rm=prepareValorantShop(rm);if(valorantShopPending(rm))return rm;return refreshTimeClocks(syncDrunkHands(beginDrunkTurn(syncTktHealth(beginRoundState(rm)))))}
 function beginRoundState(rm){if(valorantShopPending(rm)||mirrorPending(rm))return rm;rm=beginEnvironment(rm);if(rm.status!=='playing'||isoPending(rm))return rm;
   // 延遲烈日可能殺死剛選好的輪值玩家，即使舊配對仍存活也須先更新輪值。
   if(!(rm.hp[rm.turn]>0)){let turn=rm.turn;
@@ -1764,7 +1867,7 @@ function beginRoundState(rm){if(valorantShopPending(rm)||mirrorPending(rm))retur
       if(c!=='mat'||!(rm.st[i].hellFire)||rm.hp[i]<=0)return;
       rm.seats.forEach((_,eIdx)=>{
         if(eIdx===i||rm.hp[eIdx]<=0)return;
-        st[eIdx].burn=(st[eIdx].burn||0)+3;
+        st[eIdx].burn=(st[eIdx].burn||0)+3;st[eIdx].matBurnSources=[...(st[eIdx].matBurnSources||[]),{seat:i,member:rm.act?.[i]??-1,n:3}];
         dhLog.push(`${rm.seats[eIdx].name} 被【地獄之火】附加 3 層炎傷（共 ${st[eIdx].burn}）`);
       });
     });
@@ -1797,7 +1900,7 @@ function beginRoundState(rm){if(valorantShopPending(rm)||mirrorPending(rm))retur
   return beginLucioTurn(beginFirefuTurn({...rm,...(team?{team}:{}),st,sLog:dhLog.length?[...(rm.sLog||[]),...dhLog]:rm.sLog,phase:'play',pair,spin,pend:[],deadline:!environmentTradePending(rm)&&rm.cfg.time?Date.now()+rm.cfg.time*1000:0}))}
 function advance(rm){if(rm.cfg.boss){let t=rm.turn===0?2:0;if(rm.hp[t]<=0)t=rm.hp[0]>0?0:2;return beginRound({...rm,turn:t})}let t=rm.turn;for(let k=1;k<=rm.seats.length;k++){const j=(rm.turn+k)%rm.seats.length;if(rm.hp[j]>0){t=j;break}}
   return beginRound({...rm,turn:t})}
-const newSt=()=>({artOn:0,art:null,sRound:0,sealT:0,burn:0,shin:0,musouShin:0,artCpHalf:0,fx:[],stun:0,wall:0,cpg:0,asura:0,revived:0,stack:0,rage:0,eye:6,heat:0,sw:0,grace:0,karma:0,noKarma:false,cmd:null,lm:0,mdec:0,wrap:0,rv:{},res:1,superRes:0,superResTimer:0,superResUsed:0,hellFire:0,feast:0,feastBoost:0,shield:0,shieldPersistent:0,shNew:false,san:0,bow:0,arrow:0,rarrow:0,fastBow:0,paralysis:0,divineAnnihilation:0,hu:0,mhu:0,leiInit:0,xinLei:0,leiHpLost:0,cl:0,shunxing:0,nixing:0,dihuiNext:null,afterimage:0,afterimageRampage:0,xinDihui:0,markedCards:[],markTarget:null,dihuiBuff:null,dihuiMarkedRound:0,trauma:0,traumaPending:0,deepTrauma:0,superDeepTrauma:0,superChase:0,shieldSuit:null,coffin:0,will:0,dullahan:0,endlessHunger:0,laDemande:0,resolve:0,asuraStrong:0,noble:0,laCastrationUsed:false,torchUses:0,sun:0,torchRound:0,expectation:0,notExpecting:0,timeUpTurns:0,xinTiangang:0,egoStanding:0,rupture:0,ziluStrong:0,ziluFast:0,ziluFastRound:0,askReadyRound:0,askLastRound:0,ishSet:null,ishExtra:null,ishExtraRound:0,dualColor:0,light:0,ishSlashPending:false,vergSword:0,vergEgo:0,vergEgoTurns:0,vergShieldStack:0,rufoTasks:{S:false,C:false,H:false,D:false},rufoQuest:null,rufoWolf:0,rufoReady:false,rufoSkillUses:0,rufoColor:0,rufoBlastPending:false,rufoBleed:0,sadTears:0,sadNext:0,sadCounters:0,sadPride:0,mirrorSearch:0,mirrorHp:0,bambooAny:0,bambooEgo:0,smoke:newSmoke(),smokeRound:0,smokeCrimson:0,smokeSeq:0,crimsonBreathRound:0,tktBars:5,tktUnit:0,gun:null,gunShield:0,isoSkills:newIsoSkills(),isoSeq:0,isoDual:0,isoDualRefresh:0,isoCut:0,isoAdapt:0});
+const newSt=()=>({drunkSip:0,drunkCd:0,drunkWakeRound:0,drunkAwake:0,drunkAwakePending:0,drunkEndless:0,artOn:0,art:null,sRound:0,sealT:0,burn:0,shin:0,musouShin:0,artCpHalf:0,fx:[],stun:0,wall:0,cpg:0,asura:0,revived:0,stack:0,rage:0,eye:6,heat:0,sw:0,grace:0,karma:0,noKarma:false,cmd:null,lm:0,mdec:0,wrap:0,rv:{},res:1,superRes:0,superResTimer:0,superResUsed:0,hellFire:0,feast:0,feastBoost:0,shield:0,shieldPersistent:0,shNew:false,san:0,bow:0,arrow:0,rarrow:0,fastBow:0,paralysis:0,divineAnnihilation:0,hu:0,mhu:0,leiInit:0,xinLei:0,leiHpLost:0,cl:0,shunxing:0,nixing:0,dihuiNext:null,afterimage:0,afterimageRampage:0,xinDihui:0,markedCards:[],markTarget:null,dihuiBuff:null,dihuiMarkedRound:0,trauma:0,traumaPending:0,deepTrauma:0,superDeepTrauma:0,superChase:0,shieldSuit:null,coffin:0,will:0,dullahan:0,endlessHunger:0,laDemande:0,resolve:0,asuraStrong:0,noble:0,laCastrationUsed:false,torchUses:0,sun:0,torchRound:0,expectation:0,notExpecting:0,timeUpTurns:0,xinTiangang:0,egoStanding:0,rupture:0,ziluStrong:0,ziluFast:0,ziluFastRound:0,askReadyRound:0,askLastRound:0,ishSet:null,ishExtra:null,ishExtraRound:0,dualColor:0,light:0,ishSlashPending:false,vergSword:0,vergEgo:0,vergEgoTurns:0,vergShieldStack:0,rufoTasks:{S:false,C:false,H:false,D:false},rufoQuest:null,rufoWolf:0,rufoReady:false,rufoSkillUses:0,rufoColor:0,rufoBlastPending:false,rufoBleed:0,fingerRevenge:{},xichnInit:0,xichnStages:[0,0,0,0],xichnGrowth:{},xichnWait:0,xichnWaitRound:0,xichnYuhuanUsed:0,xichnExitPending:0,xichnCanExit:false,kiraHeat:0,kiraCounters:0,kiraDadUses:0,kiraArtTurns:0,lkdCounters:0,lkdHaircuts:0,lkdRedraws:0,lkdAssembled:0,lkdArtTurns:0,sadTears:0,sadNext:0,sadArtTurns:0,sadCounters:0,sadPride:0,mirrorSearch:0,mirrorHp:0,bambooAny:0,bambooEgo:0,smoke:newSmoke(),smokeRound:0,smokeCrimson:0,smokeSeq:0,crimsonBreathRound:0,tktBars:5,tktUnit:0,gun:null,gunShield:0,isoSkills:newIsoSkills(),isoSeq:0,isoDual:0,isoDualRefresh:0,isoCut:0,isoAdapt:0});
 function shuffledSeats(seats){const order=seats.map((_,i)=>i);for(let i=order.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[order[i],order[j]]=[order[j],order[i]]}return order}
 function startNormalPick(rm,bans=[]){return{...rm,status:'pick',bans:bans.filter(Boolean),selection:{order:shuffledSeats(rm.seats),step:0,picks:rm.seats.map(()=>null)}}}
 function finishBan(rm){return rm.cfg.v3?startDraft(rm,rm.ban.picks):startNormalPick(rm,rm.ban.picks)}
@@ -1810,7 +1913,7 @@ function startRoom(seats,cfg,roundBase=1){
 function startStandardBattle(rm,selected){const cfg=rm.cfg,seats=rm.seats,deck=newDeck(),hands={},up={},chars=selected?[...selected]:seats.map(()=>null);
   const bans=rm.bans||[],pool=Object.keys(CHARS).filter(x=>!bans.includes(x)&&!CHARS[x].v3only&&!CHARS[x].hidden&&(!cfg.factions||cfg.factions[CHARS[x].f]!==false)).sort(()=>Math.random()-.5);if(cfg.chars){chars.forEach((c,i)=>{if(bans.includes(c))chars[i]=null});const rest=pool.filter(c=>!chars.includes(c));chars.forEach((c,i)=>{if(!c)chars[i]=rest.shift()||null})}else chars.fill(null);
   seats.forEach((_,i)=>{hands[i]=deck.splice(0,cfg.hand);up[i]=hands[i].slice(0,cfg.open)});
-  return beginRound(initLucio({status:'playing',battleBgm:rnd(BATTLE_BGM),cfg,seats,env:newEnvironment(seats.length),oc:Object.fromEntries(seats.map((_,i)=>[i,cfg.open])),chars,st:seats.map(newSt),rdw:seats.map(()=>0),cp:seats.map(()=>0),hp:seats.map(()=>cfg.hp),bans:[...bans],d25:seats.map(()=>({val:0,bust:false,ready:false,used:false})),d25Claimed:false,d25Banner:null,hands,up,deck,round:rm.roundBase,roundBase:rm.roundBase,turn:0,last:null,winner:null}))}
+  return beginRound(initXichn(initMiddleFinger(initLucio({status:'playing',battleBgm:rnd(BATTLE_BGM),cfg,seats,env:newEnvironment(seats.length),oc:Object.fromEntries(seats.map((_,i)=>[i,cfg.open])),chars,st:seats.map(newSt),rdw:seats.map(()=>0),cp:seats.map(()=>0),hp:seats.map(()=>cfg.hp),bans:[...bans],d25:seats.map(()=>({val:0,bust:false,ready:false,used:false})),d25Claimed:false,d25Banner:null,hands,up,deck,round:rm.roundBase,roundBase:rm.roundBase,turn:0,last:null,winner:null}))))}
 function startDraft(rm,bans){const [a,b,c]=rm.ban.order;return{...rm,status:'draft',bans:bans.filter(Boolean),draft:{order:rm.seats.length===3?[a,b,c,c,b,a,a,b,c]:[a,b,b,a,a,b],step:0,picks:rm.seats.map(()=>[])}}}
 function startBattle(rm){hostSunCards={};hostPrivateMoves={};hostSunRequests={};hostZiluWaits={};privateSunCards=[];sunPending=false;const cfg=rm.cfg,seats=rm.seats,deck=newDeck(),hands={},up={};
   seats.forEach((_,i)=>{hands[i]=deck.splice(0,cfg.hand);up[i]=hands[i].slice(0,cfg.open)});
@@ -1821,16 +1924,19 @@ function startBattle(rm){hostSunCards={};hostPrivateMoves={};hostSunRequests={};
   team.forEach((t,i)=>{const lead=t[act0[i]],wood=t.find(m=>m.c==='wood'),sun=t.find(m=>m.c==='sunflower');t.forEach(m=>{if(m.c==='verg'){m.st.shield=Math.ceil(cfg.hp*.6);m.st.vergInitialShield=1;m.st.vergSword=1}});if(lead&&lead.c==='jia_qiu'){lead.st.expectation=3;lead.st.shield=(lead.st.shield||0)+cfg.hp;lead.st.shieldPersistent=(lead.st.shieldPersistent||0)+cfg.hp;lead.st.askReadyRound=rm.round}
     if(wood){wood.st.torchUses=4;if(lead){lead.st.shield=(lead.st.shield||0)+10;lead.st.shieldPersistent=(lead.st.shieldPersistent||0)+10}}if(sun){sun.st.sun=0;if(lead)lead.st.fx=(lead.st.fx||[]).concat([{k:'g',n:1,t:99999}])}});
   if(cfg.boss)team.forEach((t,i)=>{if(i!==1)t[act0[i]].st.challenger=1});
-  return beginRound(initLucio({status:'playing',battleBgm:rnd(BATTLE_BGM),cfg,seats,env:newEnvironment(seats.length),oc:Object.fromEntries(seats.map((_,i)=>[i,cfg.open])),chars:team.map((t,i)=>t[act0[i]].c),st:team.map((t,i)=>JSON.parse(JSON.stringify(t[act0[i]].st))),cp:seats.map(()=>0),hp:seats.map((_,i)=>Math.ceil(cfg.hp*(team[i][act0[i]].c==='san'?1.2:1)*(cfg.boss&&i!==1?1.5:1))),d25:seats.map(()=>({val:0,bust:false,ready:false,used:false})),d25Claimed:false,d25Banner:null,hands,up,deck,round:rm.round,roundBase:rm.roundBase,turn:0,last:null,winner:null,team,act:act0,swapsLeft:seats.map(()=>2),rdw:seats.map(()=>0),draft:rm.draft}))}
+  return beginRound(initXichn(initMiddleFinger(initLucio({status:'playing',battleBgm:rnd(BATTLE_BGM),cfg,seats,env:newEnvironment(seats.length),oc:Object.fromEntries(seats.map((_,i)=>[i,cfg.open])),chars:team.map((t,i)=>t[act0[i]].c),st:team.map((t,i)=>JSON.parse(JSON.stringify(t[act0[i]].st))),cp:seats.map(()=>0),hp:seats.map((_,i)=>Math.ceil(cfg.hp*(team[i][act0[i]].c==='san'?1.2:1)*(cfg.boss&&i!==1?1.5:1))),d25:seats.map(()=>({val:0,bust:false,ready:false,used:false})),d25Claimed:false,d25Banner:null,hands,up,deck,round:rm.round,roundBase:rm.roundBase,turn:0,last:null,winner:null,team,act:act0,swapsLeft:seats.map(()=>2),rdw:seats.map(()=>0),draft:rm.draft}))))}
 Object.values(CHARS).forEach(c=>{if(!c.f)c.f='bus'});const FAC={bus:'Limbus',pvz:'PVZ',trails:'軌跡',valorant:'Valorant'};
 const FACD={valorant:'第一回合經濟500（離索在三人模式旁觀時不獲得經濟）；商店僅顯示給出戰角色屬於Valorant的玩家。單方面攻擊或反擊成功，下回合1000；互相攻擊或雙方補血800；被斷補或單方面攻擊400，連續時每回合+200，最高1000，其他結果重置連續計數。未符合上述條件時為基本經濟500。每回合先進商店，確認後才發動任何回合開始效果。沒有槍時獲得制式手槍（虛弱2），同時只能裝備一把，新槍覆蓋舊槍。受到黑桃、梅花、方塊傷害時失去槍械；槍護盾保留一次受擊的槍。多次觸發各自計算強壯、虛弱、守護與易損；對方反擊只發動一次。',bus:'理智值 -45～45（初始0）。出牌點數比對方大+5、小-5；反擊成功+10、被反擊-10；擊殺敵人+15；瓦倫希娜／盧西奧拼點勝利+15（取代比點數）；天殺不增減。一般正理智時有(50+理智)%機率攻擊傷害+1；一般負理智時有(50+|理智|)%機率傷害-1。理智45時傷害固定+2；理智-45時進入侵蝕並由系統隨機出牌：黑牌70%反噬自身、方塊70%失效、紅心70%改為治療敵人。侵蝕回合結算後，下回合理智重置為0；即使未觸發70%的負面效果也會重置。3v3中換人時會繼承全部理智；角色倒下換上下一位時，若理智&lt;0則重置為0，否則繼承。',
- pvz:'僅限3v3，PVZ角色皆為後備植物且不可上場，每隊最多選2名。高堅果會吸收全隊傷害；火炬樹樁提供10點首發護盾及4次火炬；向日葵提供首發永久守護與每回合陽光。植物護盾會擋下整次傷害，超出護盾量的部分不會傷害血條。',
+ pvz:'僅限3v3，PVZ角色皆為後備植物且不可上場，每隊最多選2名。高堅果會吸收全隊傷害；火炬樹樁提供10點首發護盾及4次火炬；向日葵提供首發永久守護與每回合陽光。護盾只吸收現有盾量，超出護盾量的部分會繼續扣除生命。',
  trails:'CP值（血量下方綠條）：初始0，上限200。3v3中全隊共用同一條CP：軌跡角色換成軌跡角色時CP累積，換成其他陣營角色再換回軌跡角色時，也保留換下時的CP（無論倒下或換人）。造成傷害+15、受到傷害+10，另有特定CP增幅技能。戰技：消耗CP使用，於下個回合開始時（所有玩家出牌前）生效。S技：消耗CP的大招，使用時立即生效；若對手已出牌，會退還對手的卡片讓其重新出牌。'};
 function calcBuffs(c,s0){const o={strong:0,weak:0,vuln:0,guard:0};if(!s0)return o;
   const gun=valorantGun(c,s0);if(gun){o.strong+=gun.strong||0;o.weak+=gun.weak||0}
   if(c==='rien'){const g=s0.grace||0,l=g>=9?3:g>=6?2:g>=3?1:0;o.guard+=l===3?2:l>=1?1:0;o.strong+=l===3?2:l===2?1:0;const k=s0.karma||0;o.vuln+=Math.floor(k/2);o.weak+=Math.floor(k/3);o.strong+=(s0.xinStrong||0);o.guard+=(s0.xinGuard||0)}
   if(c==='val'){o.strong+=(s0.sw||0)+(s0.valDishonor?1:0);if((s0.heat||0)>0)o.weak+=2}
   if(c==='lucio')o.strong+=s0.lucioStrong||0;
+  if(c==='drunk'){const n=s0.drunkSip||0,awake=drunkAwake(s0),extra=drunkExtra(s0);o.guard+=(n>=1?1:0)+(awake?1:0);o.strong+=(n>=3?1:0)+(awake?1:0)+extra;o.vuln+=extra}
+  if(c==='kira')o.strong+=Math.min(2,s0.kiraHeat||0);
+  if(c==='xichn'){const a=xichnStages(s0),power=a[0]-3,def=[-3,-2,-1,0,1,3,5][a[2]];o.strong+=Math.max(0,power);o.weak+=Math.max(0,-power);o.guard+=Math.max(0,def);o.vuln+=Math.max(0,-def)}
   if(c==='ring')o.strong+=Math.floor((s0.lm||0)/3);
   if(c==='lei'&&s0.xinLei)o.strong+=Math.floor((s0.leiHpLost||0)/5);
   if(c==='sinclair')o.strong+=Math.floor((s0.endlessHunger||0)/20);
@@ -1851,7 +1957,7 @@ const fixedCardRank=(s0,r)=>(s0.paralysis||0)>0?1:(s0.divineAnnihilation||0)>0?2
 function effRank(c,s0,card,mult,bonus){mult=mult===undefined?1:mult;bonus=bonus||0;const raw=+card.slice(1),b=calcBuffs(c,s0);let base=c==='lucio'?lucioBase(s0,card):(c==='umb'&&(s0.rage||0)>0)?13:valorantBase(c,s0,card);if(c==='rien'&&s0.cmd===card)base+=(s0.cmdAddict?8:1);
   if(bonus>0)base+=bonus;if(c==='shi_faust'&&(s0.rarrow||0)>0){if(card[0]==='S')base*=3;else if(card[0]==='C')base*=5}
   let r=Math.max(0,Math.floor(base*mult+1e-9)+b.strong-b.weak);
-  if(c==='sad'){if(sadEmpowered(s0))r+=5;if(s0.sadPride&&card[0]==='D')r=Math.floor(r*1.5+1e-9)}
+  if(c==='sad'){if(sadEmpowered(s0))r+=6;if(s0.sadPride&&card[0]==='D')r=Math.floor(r*1.5+1e-9)}
   if(c==='shi_faust'&&s0.bow&&card[0]!=='H')r=Math.max(1,Math.floor(r*0.3+1e-9));
   return fixedCardRank(s0,r)}
 function redSt(c,s0){let r=0;if(c==='rean'&&shinActive(s0))r+=.5;if((s0.asura||0)>0)r+=.5;(s0.fx||[]).forEach(x=>{if(x.k==='rd')r+=x.n});return r}
@@ -1866,8 +1972,9 @@ function protectLife(c,s0,hp,name,log){if(hp>0)return hp;
   return 1
 }
 // 共用倒下、復活及換人結算，立即絕技不推進回合或觸發回合開始效果。
-function settleCharacters(rm0,{hp,st,cp,team:tcl,rres={},nut={},spk={},autoZilu={},log=[],passChars=rm0.chars,swaps=null,instant=false,silent=false}){
-  if(instant&&rm0.d25Batch){rm0.d25Batch.autoZilu={...(rm0.d25Batch.autoZilu||{}),...autoZilu};if(tcl){Object.keys(rres).forEach(i=>Object.keys(rres[i]).forEach(k=>tcl[i][k].hp=rres[i][k]));Object.keys(nut).forEach(i=>tcl[i][nut[i].k].hp=nut[i].hp);tcl.forEach((t,i)=>{t[rm0.act[i]].hp=hp[i];t[rm0.act[i]].st=JSON.parse(JSON.stringify(st[i]))})}return{team:tcl,act:rm0.act,swapsLeft:rm0.swapsLeft,chars:rm0.chars,hp,st,cp}}
+function settleCharacters(rm0,options){let {hp,st,cp,team:tcl,rres={},nut={},spk={},autoZilu={},log=[],passChars=rm0.chars,swaps=null,forcedSwaps={},instant=false,silent=false}=options;
+  if(instant&&rm0.d25Batch){rm0.d25Batch.spk={...(rm0.d25Batch.spk||{}),...spk};rm0.d25Batch.autoZilu={...(rm0.d25Batch.autoZilu||{}),...autoZilu};if(tcl){Object.keys(rres).forEach(i=>Object.keys(rres[i]).forEach(k=>tcl[i][k].hp=rres[i][k]));Object.keys(nut).forEach(i=>tcl[i][nut[i].k].hp=nut[i].hp);tcl.forEach((t,i)=>{t[rm0.act[i]].hp=hp[i];t[rm0.act[i]].st=JSON.parse(JSON.stringify(st[i]))})}return{team:tcl,act:rm0.act,swapsLeft:rm0.swapsLeft,chars:rm0.chars,hp,st,cp}}
+  if(!silent&&tcl){forcedSwaps={...forcedSwaps};st.forEach((s,i)=>{if(!s.xichnExitPending||rm0.chars[i]!=='xichn'||hp[i]<=0)return;s.xichnExitPending=0;const choices=tcl[i].map((m,k)=>({m,k})).filter(({m,k})=>k!==rm0.act[i]&&!m.dead&&(rres[i]?.[k]??m.hp)>0&&canDeploy(m.c));if(choices.length)forcedSwaps[i]=rnd(choices).k})}
   const rm={...rm0,chars:passChars},nm=i=>rm0.seats[i].name,max=rm0.cfg.hp;
   const mx=i=>characterMaxHp(rm0,i,rm0.chars[i],st[i]);
   let nteam=rm.team,nact=rm.act,nsw=rm.swapsLeft,nchars=rm0.chars;
@@ -1879,7 +1986,7 @@ function settleCharacters(rm0,{hp,st,cp,team:tcl,rres={},nut={},spk={},autoZilu=
     const load=(i,k,keepSan)=>{const sn0=st[i].san||0;nact[i]=k;const m=nteam[i][k];hp[i]=m.hp;st[i]=JSON.parse(JSON.stringify(m.st));nchars[i]=m.c;if(keepSan&&!silent)st[i].san=sn0};
     rm.seats.forEach((_,i)=>{if(silent||!fallen[i]||hp[i]>0||spk[i]||nchars[i]==='sinclair')return;const si=nteam[i].findIndex(m=>m.c==='sinclair');if(si<0)return;const s0=nteam[i][si].st,gain=Math.ceil(mx(i)/2);s0.endlessHunger=(s0.endlessHunger||0)+gain;log.push(`${nm(i)} 的隊友陣亡，辛克萊獲得 ${gain} 層無盡的飢餓（共 ${s0.endlessHunger}）`);if(s0.endlessHunger>=20&&!s0.noble){s0.noble=1;s0.resolve=1;s0.asuraStrong=(s0.asuraStrong||0)+3;log.push(`${nm(i)} 的辛克萊獲得【高貴的品格】：毅力×1、永久強壯×3`)}});
     if(!silent&&rm.cfg.boss)rm.seats.forEach((_,dead)=>{if(!fallen[dead]||dead===1||hp[dead]>0)return;const ally=dead===0?2:0;if(hp[ally]<=0)return;const si=nteam[ally].findIndex(m=>m.c==='sinclair');if(si<0)return;const s0=si===nact[ally]?st[ally]:nteam[ally][si].st,gain=Math.ceil(mx(dead)/2);s0.endlessHunger=(s0.endlessHunger||0)+gain;log.push(`${nm(dead)} 陣亡，盟友 ${nm(ally)} 的辛克萊獲得 ${gain} 層無盡的飢餓（共 ${s0.endlessHunger}）`);if(s0.endlessHunger>=20&&!s0.noble){s0.noble=1;s0.resolve=1;s0.asuraStrong=(s0.asuraStrong||0)+3;log.push(`${nm(ally)} 的辛克萊獲得【高貴的品格】：毅力×1、永久強壯×3`)}});
-    rm.seats.forEach((_,i)=>{if(!silent&&fallen[i]&&hp[i]<=0&&rm.chars[i]==='leo'&&!st[i].revived){st[i].revived=1;hp[i]=Math.max(1,Math.floor(mx(i)*.6));st[i].fx=(st[i].fx||[]).filter(x=>!['v','w','dm','rd','ns'].includes(x.k));st[i].burn=0;st[i].stun=0;st[i].sealT=0;st[i].trauma=0;st[i].traumaPending=0;st[i].deepTrauma=0;st[i].asura=1;st[i].asuraStrong=(st[i].asuraStrong||0)+2;cp[i]=Math.min(200,cp[i]+100);
+    rm.seats.forEach((_,i)=>{if(!silent&&fallen[i]&&hp[i]<=0&&rm.chars[i]==='leo'&&!st[i].revived){st[i].revived=1;hp[i]=Math.max(1,Math.floor(mx(i)*.6));st[i].fx=(st[i].fx||[]).filter(x=>!['v','w','dm','rd','ns'].includes(x.k));st[i].burn=0;st[i].matBurnSources=[];st[i].stun=0;st[i].sealT=0;st[i].trauma=0;st[i].traumaPending=0;st[i].deepTrauma=0;st[i].asura=1;st[i].asuraStrong=(st[i].asuraStrong||0)+2;cp[i]=Math.min(200,cp[i]+100);
       log.push(`${nm(i)} 的劍帝萊維以 ${hp[i]} 點生命復活，獲得修羅之炎（+100CP、受到傷害-50%，1回合；永久獲得2層強壯）`)}});
     const died={};
     rm.seats.forEach((_,i)=>{if(!fallen[i]||hp[i]>0)return;died[i]=1;const dc=nchars[i],sn=st[i].san||0;save(i);nteam[i][nact[i]].dead=true;
@@ -1887,24 +1994,26 @@ function settleCharacters(rm0,{hp,st,cp,team:tcl,rres={},nut={},spk={},autoZilu=
       if(k>=0){load(i,k);if(!silent)st[i].san=sn<0?0:sn;log.push(`${nm(i)} 的 ${CHARS[dc].n} 倒下，${CHARS[nchars[i]].n} 上場（理智${sn<0?'由 '+sn+' 重置為 0':'繼承 '+sn}）`)}
       else log.push(`${nm(i)} 的角色全數倒下`)});
     rm.seats.forEach((_,i)=>{if(silent||!autoZilu[i]||died[i]||hp[i]<=0||nchars[i]!=='jia_qiu')return;const k=nteam[i].findIndex(m=>m.c==='zilu'&&!m.dead&&m.hp>0);if(k<0)return;save(i);load(i,k);log.push(`${nm(i)} 的賈丘護盾破裂，自動換上子路`)});
+    rm.seats.forEach((_,i)=>{const k=forcedSwaps[i];if(k===undefined||died[i]||hp[i]<=0||k===nact[i]||!nteam[i][k]||nteam[i][k].dead||!(nteam[i][k].hp>0)||!canDeploy(nteam[i][k].c))return;save(i);const before=nchars[i];load(i,k,true);log.push(`${nm(i)} 免費自動換人：${CHARS[before].n} → ${CHARS[nchars[i]].n}（繼承理智${st[i].san||0}）`)});
     rm.seats.forEach((_,i)=>{const k=swaps&&swaps[i];if(k===undefined||died[i]||hp[i]<=0)return;
       if(nsw[i]>0&&k!==nact[i]&&nteam[i][k]&&!nteam[i][k].dead&&canDeploy(nteam[i][k].c)){save(i);const o=nchars[i];load(i,k,true);nsw[i]--;log.push(`${nm(i)} 換人：${CHARS[o].n} → ${CHARS[nchars[i]].n}（剩 ${nsw[i]} 次，繼承理智 ${st[i].san||0}）`)}});
     rm.seats.forEach((_,i)=>{const k=instant?-1:(rm.st[i].cl||0)-1;if(k<0||died[i]||hp[i]<=0||nact[i]!==rm.act[i]||!nteam[i][k]||nteam[i][k].dead)return;st[i].cl=0;save(i);const o=nchars[i];load(i,k,true);log.push(`${nm(i)} 自動切換：${CHARS[o].n} → ${CHARS[nchars[i]].n}`)});
     if(!silent)rm.seats.forEach((_,i)=>{const enemy=rm.seats.some((__,j)=>j!==i&&nchars[j]==='ailan'&&hp[j]>0);if(enemy)return;const clear=s0=>{s0.trauma=0;s0.traumaPending=0;s0.deepTrauma=0};clear(st[i]);nteam[i].forEach(m=>clear(m.st))});
     rm.seats.forEach((_,i)=>save(i))}
-  const result={team:nteam,act:nact,swapsLeft:nsw,chars:nchars,hp,st,cp};rewardLucioDeath({...rm0,...result},log);syncTktHealth({...rm0,...result});return result;
+  const result={team:nteam,act:nact,swapsLeft:nsw,chars:nchars,hp,st,cp};rewardLucioDeath({...rm0,...result},log);syncTktHealth({...rm0,...result});return armXichn(enterXichn(rm0,result,options));
 }
 // 即時絕技結束後先結算角色生死，再以存活玩家更新當前配對。
-function settleInstantBattle(r,log,charactersSettled=false){
-  if(r.d25Batch)return;enforceFirefuHands(r);
+function settleInstantBattle(r,log,charactersSettled=false,effects={}){
+  armXichn(r);
+  if(r.d25Batch)return;if(!charactersSettled)soberDrunk(r,effects.damage,effects.combat,log);enforceFirefuHands(r);
   if(!charactersSettled){
     r.cp=r.cp||r.seats.map(()=>0);
     const passChars=r.chars.map((c,i)=>r.st[i].sealT>0?'_':c);
     r.seats.forEach((_,i)=>{if(!r.team||!r.team[i][r.act[i]].dead)r.hp[i]=protectLife(passChars[i],r.st[i],r.hp[i],r.seats[i].name,log)});
-    if(r.team)Object.assign(r,settleCharacters(r,{hp:r.hp,st:r.st,cp:r.cp,team:r.team,log,passChars,instant:true}));
+    if(r.team)Object.assign(r,settleCharacters(r,{hp:r.hp,st:r.st,cp:r.cp,team:r.team,log,passChars,instant:true,...effects}));
   }
   r.hp=r.hp.map(h=>Math.max(0,h));
-  rewardLucioDeath(r,log);beginLucioTurn(r);
+  rewardLucioDeath(r,log);beginLucioTurn(r);beginDrunkTurn(r);Object.assign(r,syncDrunkHands(r));
   const alive=r.seats.map((_,i)=>i).filter(i=>r.hp[i]>0),wasOver=r.status==='over';
   const winner=r.cfg.boss?(r.hp[1]<=0?0:r.hp[0]<=0&&r.hp[2]<=0?1:null):(alive.length<=1?(alive[0]??-1):null);
   if(winner!==null){r.status='over';r.winner=winner;if(!wasOver)log.push(winner<0?'本次絕技後全員倒下，平手！':`🏆 ${r.cfg.boss?(winner===1?'Boss方':'挑戰者方'):r.seats[winner].name} 獲勝！`);return}
@@ -1921,7 +2030,7 @@ function resolveSilent(rm0,mv,gs,swaps,extra){
     st:original.st.map(s=>({...newSt(),fx:(s.fx||[]).filter(f=>f.source==='environment'),noD:s.noD||0,dDefFail:s.dDefFail||0,mirrorHp:s.mirrorHp||0,bombs:JSON.parse(JSON.stringify(s.bombs||[]))})),env:JSON.parse(JSON.stringify(original.env))};
   const next=resolve(plain,mv,gs,{},null,{...extra,silentPlain:true,noD25:true,deferAdvance:true});
   const log=['🔇【沉默】本回合只結算四花色基本效果，特殊狀態及二十五之刻暫停。',...next.last.log];
-  const st=original.st.map((s,i)=>({...s,isoCut:0,isoAdapt:0,noD:next.st[i].noD||0,dDefFail:next.st[i].dDefFail||0,bombs:next.st[i].bombs,shield:(s.shield||0)+(next.st[i].shield||0),shieldPersistent:(s.shieldPersistent||0)+(next.st[i].shieldPersistent||0)}));
+  const st=original.st.map((s,i)=>({...s,kiraArtTurns:original.chars[i]==='kira'&&original.pair.includes(i)&&mv[i]?0:s.kiraArtTurns||0,lkdArtTurns:original.chars[i]==='lkd'&&original.pair.includes(i)&&mv[i]?0:s.lkdArtTurns||0,sadArtTurns:original.chars[i]==='sad'&&original.pair.includes(i)&&mv[i]?0:s.sadArtTurns||0,isoCut:0,isoAdapt:0,noD:next.st[i].noD||0,dDefFail:next.st[i].dDefFail||0,bombs:next.st[i].bombs,shield:(s.shield||0)+(next.st[i].shield||0),shieldPersistent:(s.shieldPersistent||0)+(next.st[i].shieldPersistent||0)}));
   const state=settleCharacters(original,{hp:next.hp,st,cp:original.cp,team:original.team,log,swaps,instant:true,silent:true});
   const result={...original,...next,...state,d25:original.d25,d25Claimed:original.d25Claimed,d25Banner:null,status:'playing',winner:null,
     last:{...next.last,chars:original.chars,weapons:valorantWeaponSnapshot(original),damage:next.last.damage.map(e=>({...e,member:original.team?original.act[e.seat]:-1})),combat:(next.last.combat||[]).map(e=>({...e,member:original.team?original.act[e.seat]:-1,sourceMember:original.team?original.act[e.source]:-1})),healing:(next.last.healing||[]).map(e=>({...e,member:original.team?original.act[e.seat]:-1})),log}};
@@ -1933,20 +2042,23 @@ function resolveSilent(rm0,mv,gs,swaps,extra){
   return advance(result);
 }
 function markEnvironmentSupportDamage(r,result){const S=r.env?.support;if(!S||S.round!==r.round||!result)return;if((result.combat||[]).some(e=>e.source===S.to&&e.seat!==S.to&&e.amount>0)||(result.hits||[]).includes(S.to)&&(result.damage||[]).some(e=>e.seat!==S.to&&e.amount>0&&!e.environment))S.damage=true}
-function resolve(rm0,mv,gs,sk,swaps,extra){const r=resolveBattle(rm0,mv,gs,sk,swaps,extra);markEnvironmentSupportDamage(r,r.instantResult);return r}
-function resolveBattle(rm0,mv,gs,sk,swaps,extra){if(isoPending(rm0))return rm0;if(valorantShopPending(rm0)||mirrorPending(rm0)||environmentTradePending(rm0))return rm0;if(envSilent(rm0)&&!extra?.silentPlain&&!extra?.environmentDamage)return resolveSilent(rm0,mv,gs,swaps,extra);const rm=sealPass(rm0),submittedMv={...mv};mv={...mv};if(rm.env)rm.env=JSON.parse(JSON.stringify(rm.env));
+function resolve(rm0,mv,gs,sk,swaps,extra){armXichn(rm0);const r=resolveBattle(rm0,mv,gs,sk,swaps,extra);markEnvironmentSupportDamage(r,r.instantResult);return r}
+function resolveBattle(rm0,mv,gs,sk,swaps,extra){if(isoPending(rm0))return rm0;if(valorantShopPending(rm0)||mirrorPending(rm0)||environmentTradePending(rm0))return rm0;if(envSilent(rm0)&&!extra?.silentPlain&&!extra?.environmentDamage)return resolveSilent(rm0,mv,gs,swaps,extra);const rm=sealPass(rm0),submittedMv={...mv};mv={...mv};rm.pair.forEach(i=>{if(kiraCardLocked(rm0,i))delete mv[i]});if(rm.env)rm.env=JSON.parse(JSON.stringify(rm.env));
   if(rm.env?.support?.round===rm.round)gs={seat:rm.env.support.by,support:rm.env.support.to};
   const valorantEconomy=rm.valorantEconomy?JSON.parse(JSON.stringify(rm.valorantEconomy)):null,attackWeapons={},isoAdapt=rm.pair.some(i=>rm.chars[i]==='iso'&&rm.st[i].isoAdapt);
-  const hp=[...rm.hp],nm=i=>rm.seats[i].name,log=[],damage=[],combat=[],healing=[],P={},leiU={},ohNew={},max=rm.cfg.hp,ex={},hits=[],refl={},cntd={},effd={};const cblk={},mx=i=>characterMaxHp(rm0,i,rm0.chars[i],st[i]),hd=a=>0;
+  const hp=[...rm.hp],nm=i=>rm.seats[i].name,log=[],damage=[],combat=[],healing=[],soundCues=[],P={},leiU={},ohNew={},max=rm.cfg.hp,ex={},hits=[],refl={},cntd={},effd={};const cblk={},mx=i=>characterMaxHp(rm0,i,rm0.chars[i],st[i]),hd=a=>0;
   const recordHeal=(seat,amount,source=seat,kind='heal',arr=hp)=>{amount=tidyHp(amount);addHealingFx(healing,rm0,seat,amount,undefined,source,kind,damage.length-1);shareEnvironmentHealing(rm0,seat,amount,log,healing,arr,st,lock)};
   const d25Success={},d25HeartGain={},d25List=JSON.parse(JSON.stringify(rm.d25||rm.seats.map(()=>({val:0,bust:false,ready:false,used:false}))));
-  const recordHeartHeal=(seat,amount,source=seat)=>{amount=tidyHp(amount);recordHeal(seat,amount,source);if(seat===source&&amount>0)d25HeartGain[source]=tidyHp((d25HeartGain[source]||0)+amount)};
+  const recordHeartHeal=(seat,amount,source=seat)=>{amount=tidyHp(amount);recordHeal(seat,amount,source);if(amount>0)xichnLearning.push({route:1,seat:source,member:rm.act?.[source]??-1});if(seat===source&&amount>0)d25HeartGain[source]=tidyHp((d25HeartGain[source]||0)+amount)};
   let d25Claimed=!!rm.d25Claimed,d25JustTriggered=null;const d25Candidates=[];
   const st=JSON.parse(JSON.stringify(rm.st)),got={},guessOnly={},wrapUp={},spk={},boost={},lock={},autoZilu={},rufoTaskEvents=Object.fromEntries(rm.pair.map(i=>[i,{S:false,C:false,H:false,D:false}])),rufoUsed={},aceOn=false;
+  const xichnExits={},xichnPrimary={},xichnLearning=[],xichnBlocked=rm0.team?rm0.team.flatMap((t,i)=>t.flatMap((m,k)=>(k===rm0.act[i]?rm0.st[i]:m.st).sealT>0?[`${i}:${k}`]:[])):rm0.st.flatMap((s,i)=>s.sealT>0?[`${i}:-1`]:[]);
+  const registerXichnExit=(i,arr=hp)=>{if(!st[i].xichnExitPending||xichnExits[i]||!tcl)return;st[i].xichnExitPending=0;const choices=tcl[i].map((m,k)=>({m,k})).filter(({m,k})=>k!==rm.act[i]&&!m.dead&&(rres[i]?.[k]??m.hp)>0&&canDeploy(m.c));if(!choices.length)return;const {k,m}=rnd(choices);xichnExits[i]={from:rm.act[i],to:k};m.st.san=st[i].san||0;log.push(`${nm(i)} 的賈惜春立即免費換下，${CHARS[m.c].n} 上場；後續連擊改由接替角色承受`)};
+  const settleResolved=options=>{rm.seats.forEach((_,i)=>registerXichnExit(i));const view={...rm0,hp,st,team:tcl,chars:rm.chars};soberDrunk(view,damage,combat,log);if(tcl)tcl.forEach((t,i)=>t.forEach((m,k)=>{if(k!==rm.act[i]&&rres[i]?.[k]!==undefined)m.hp=rres[i][k]}));learnXichn(view,xichnLearning,log,xichnBlocked);let base=rm0;const pass=[...rm.chars];if(Object.keys(xichnExits).length){base={...rm0,chars:[...rm0.chars],act:[...rm0.act],st:[...rm0.st],team:tcl};Object.entries(xichnExits).forEach(([seat,x])=>{const i=+seat,old=tcl[i][x.from],incoming=tcl[i][x.to];old.hp=hp[i];old.dead=old.hp<=0;incoming.st.san=st[i].san||0;old.st=JSON.parse(JSON.stringify(st[i]));hp[i]=rres[i]?.[x.to]??incoming.hp;st[i]=JSON.parse(JSON.stringify(incoming.st));delete (rres[i]||{})[x.to];base.act[i]=x.to;base.chars[i]=incoming.c;base.st[i]=st[i];pass[i]=st[i].sealT>0?'_':incoming.c;incoming.hp=hp[i];incoming.dead=false;if(!x.slain)delete spk[i]})}return settleCharacters(base,{...options,hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:pass,damage,combat,healing,hits,soundCues})};
   const support=envActive(rm,'cheer')&&rm.cfg.n===3&&!rm.cfg.boss&&gs&&hp[gs.seat]>0&&!rm.pair.includes(gs.seat)&&rm.pair.includes(gs.support)?{by:gs.seat,to:gs.support}:null;
   if(support&&!st[support.to].fx.some(f=>f.cheer===rm.round)){st[support.to].fx.push({k:'s',n:5,t:1,source:'environment',round:rm.round,cheer:rm.round});log.push(`📣 ${nm(support.by)} 支持 ${nm(support.to)}，本回合強壯＋5`)}
   const cueEnvironment=(id,stage,seats,detail,options={})=>queueEnvironmentFx(rm,id,stage,[],[],{focus:seats.map(seat=>({seat,member:rm.act?.[seat]??-1})),detail,...options});
-  const guard=()=>{rm.seats.forEach((_,i)=>{if(hp[i]>mx(i)&&!st[i].mirrorHp){const before=hp[i];hp[i]=mx(i);recordHpLoss(rm0.chars[i],st[i],before,hp[i])}});guard0()},guard0=(arr=hp)=>rm.seats.forEach((_,i)=>{if(!spk[i])arr[i]=protectLife(rm.chars[i],st[i],arr[i],nm(i),log)});
+  const guard=()=>{rm.seats.forEach((_,i)=>{if(hp[i]>mx(i)&&!st[i].mirrorHp){const before=hp[i];hp[i]=mx(i);recordHpLoss(rm0.chars[i],st[i],before,hp[i])}});guard0()},guard0=(arr=hp)=>rm.seats.forEach((_,i)=>{if(!spk[i]&&!rm0.d25Batch?.spk?.[i])arr[i]=protectLife(rm.chars[i],st[i],arr[i],nm(i),log)});
   const lib=i=>{const g=(rm.chars[i]==='rien'&&rm.st[i].grace)||0;return g>=9?3:g>=6?2:g>=3?1:0};
   const rk=i=>(rm.chars[i]==='rien'&&rm.st[i].karma)||0;
   const takenMod=i=>{const b=calcBuffs(rm.chars[i],st[i]);return b.vuln-b.guard};
@@ -1991,28 +2103,46 @@ function resolveBattle(rm0,mv,gs,sk,swaps,extra){if(isoPending(rm0))return rm0;i
     if(!s0.eye&&!s0.xinVal){s0.heat=3;log.push(`${name} 預知眼耗盡，進入過熱（3場戰鬥：傷害-2）`)}
     return true;
   };
-  const takeOne=(arr,i,v,by,fm,kind,blackRank)=>{recordWeapon(by);if(v>0&&(st[i].wall||0)>0){st[i].wall--;log.push(`${nm(i)} 的大地之牆抵擋了這次傷害`);return 0}
+  const fingerRoom=arr=>({...rm0,hp:arr,st,team:tcl});
+  const fingerBonus=(arr,target,by,c)=>by!==undefined&&by!==null&&isMiddleFinger(c)&&enemies(by).includes(target)?revengeStacks(fingerRoom(arr),by,st[target]):0;
+  const kiraHit=(arr,by,target,dealt,targetSt,profile)=>{const c=profile?.c||rm.chars[by],s0=profile?.s||st[by];if(c!=='kira'||!(dealt>0)||s0.sealT>0||envSilent(rm0)||!enemies(by).includes(target)||!revengeStacks(fingerRoom(arr),by,targetSt)||(s0.kiraHeat||0)>=2)return;s0.kiraHeat=(s0.kiraHeat||0)+1;log.push(`${nm(by)} 的【熱絲】獲得1層永久強壯（${s0.kiraHeat}/2）`)};
+  // 只追蹤老爸技能實際換上的成員；反傷沒有攻擊來源，不會再反傷或施加復仇。
+  const kiraRelayDamage=events=>{if(envSilent(rm0))return;for(const link of rm0.kiraRelays||[]){if(link.round!==rm0.round)continue;const amount=events.reduce((n,e)=>n+(e.source===link.seat&&e.sourceMember===link.member&&e.amount>0?e.amount:0),0);if(!(amount>0)||!tcl)continue;const m=tcl[link.seat]?.[link.kira];if(!m||m.c!=='kira'||m.dead)continue;const active=rm0.act[link.seat]===link.kira,current=active?hp[link.seat]:(rres[link.seat]?.[link.kira]??m.hp);if(!(current>0))continue;const actual=active?takeOne(hp,link.seat,amount,undefined,undefined,'fixed'):hitRes(link.seat,link.kira,amount,undefined,'老爸技能等量反傷',undefined,undefined,'fixed');log.push(`${nm(link.seat)} 換上的${CHARS[tcl[link.seat][link.member].c].n}造成${amount}點傷害，綺羅一併承受等量反傷（實際${actual}）`)}};
+  const matBurnRelay=(s0,b,dealt)=>{const sources=s0.matBurnSources||[];let remaining=b;const events=sources.map(x=>{const n=Math.min(remaining,x.n);remaining-=n;return{source:x.seat,sourceMember:x.member,amount:tidyHp(dealt*n/b)}});kiraRelayDamage(events);if(!remaining&&sources.length)sources[0].n--;s0.matBurnSources=sources.filter(x=>x.n>0)};
+  const fingerHit=(c,s0,seat,by,dealt,kind,arr,reserve=false,alive=true,member=-1)=>{
+    if(!(dealt>0)||!isMiddleFinger(c)||s0.sealT>0||envSilent(rm0)||by===undefined||by===null||!enemies(seat).includes(by)||!['spade','club'].includes(kind)||!reserve&&P[seat]&&'SC'.includes(P[seat].s)&&!P[seat].v)return;
+    const side=middleFingerSide(rm0,seat),cap=middleFingerCount(fingerRoom(arr),seat)*2,target=st[by];target.fingerRevenge=target.fingerRevenge||{};target.fingerRevenge[side]=Math.min(cap,(target.fingerRevenge[side]||0)+1);
+    log.push(`${nm(by)} 被【中指】施加復仇對象（玩家${side+1}方共用，${target.fingerRevenge[side]}/${cap}層）`);
+    if(c!=='lkd'||!alive||arr[by]<=0)return;
+    const b=calcBuffs(c,s0);let v=envAttack(rm,Math.max(0,Math.floor(2*prevMult(c,s0,'S')+1e-9)+b.strong-b.weak)),san=s0.san||0;
+    if(v>0){if(san>=45)v+=2;else if(san>-45&&san&&Math.random()<(50+Math.abs(san))/100)v=Math.max(0,v+(san>0?1:-1))}
+    const profile=reserve?{c,s:s0,member}:null,n=takeOne(arr,by,v,seat,undefined,'payback',undefined,profile);
+    log.push(`${nm(seat)} 的${reserve?'後備里卡多':''}【償還】對 ${nm(by)} 造成基礎2點傷害（實際${n}）`);
+  };
+  const takeOne=(arr,i,v,by,fm,kind,blackRank,profile)=>{registerXichnExit(i,arr);xichnPrimary[i]=xichnExits[i]?.to??rm.act?.[i];if(xichnExits[i]&&kind!=='burn'){const k=xichnExits[i].to;return hitRes(i,k,v,fm,'余桓換人後的攻擊',undefined,by,kind,arr,blackRank)}const source=by,shieldResolveOnly=kind==='kiraFixed';if(profile)by=undefined;recordWeapon(by);if(!shieldResolveOnly&&v>0&&(st[i].wall||0)>0){st[i].wall--;log.push(`${nm(i)} 的大地之牆抵擋了這次傷害`);return 0}
+    if(rm.chars[i]==='xichn')st[i].xichnCanExit=!!tcl&&tcl[i].some((m,k)=>k!==rm.act[i]&&!m.dead&&(rres[i]?.[k]??m.hp)>0&&canDeploy(m.c));
     const ruptureBefore=st[i].rupture||0;
-    // 固定最終傷害略過威力增減、破裂與減傷，仍保留牆、護盾及高堅果攔截。
-    if(kind!=='fixed'){
+    // 綺羅老爸技只允許護盾與毅力影響；一般固定傷害仍保留牆、代受等防護。
+    if(kind!=='fixed'&&!shieldResolveOnly){
+    const revenge=fingerBonus(arr,i,source,profile?.c||rm.chars[by]);if(v>0&&revenge){v+=revenge;log.push(`${nm(i)} 的復仇對象使中指傷害+${revenge}`)}
     const fasterZilu=by!==undefined&&rm.chars[by]==='zilu'&&P[by]&&P[i]&&P[by].r<P[i].r;
     if(v>0&&(st[i].rupture||0)>0){const n=st[i].rupture;v+=n;if(!fasterZilu)st[i].rupture--;log.push(`${nm(i)} 的破裂追加 ${n} 點傷害${fasterZilu?'（子路出牌較快，破裂不消耗）':''}`)}
     if(by!==undefined&&rm.chars[by]==='jia_qiu'&&st[by].egoStanding&&P[by]&&P[i]&&((P[by].s==='S'||P[by].s==='C')&&P[i].s==='H'||P[by].s==='D'&&'SC'.includes(P[i].s))){v+=2;log.push(`${nm(by)} 的綻放EGO：而立使單方面傷害+2`)}
     if(v>0)v=Math.max(0,v+takenMod(i));const rdv=redSt(rm.chars[i],st[i]);if(v>0&&rdv>0)v=Math.ceil(v*(1-Math.min(.9,rdv))-1e-9);if(v>0&&fm)v=Math.floor(v*fm+1e-9);
     if(v>0&&rm.chars[i]==='heathcliff'&&((kind==='spade'&&st[i].shieldSuit==='S')||(kind==='counter'&&st[i].shieldSuit==='D'))){v=Math.ceil(v/2);log.push(`${nm(i)} 的${SU[st[i].shieldSuit]}盾使${kind==='spade'?'黑桃傷害':'反擊傷害'}減半`) }
     }
-    if(v>0&&arr[i]>0&&valDodge(i,rm.chars[i],st[i],by,blackRank)){st[i].rupture=ruptureBefore;return 0}
-    v=isoDamage(rm.chars[i],st[i],v,log,nm(i));
-    const fxStart=damage.length,beforeShield=st[i].shield||0,a=Math.min(beforeShield,v);if(a>0){st[i].shield-=a;st[i].shieldPersistent=Math.max(0,(st[i].shieldPersistent||0)-a);log.push(`${nm(i)} 的護盾吸收 ${a} 點傷害`+(v>a?`，並擋下溢出的 ${v-a} 點傷害`:''));vergBreak(rm.chars[i],st[i],beforeShield,i,'護盾');if(rm.chars[i]==='jia_qiu'&&st[i].shield<=0&&!st[i].egoStanding){st[i].egoStanding=1;autoZilu[i]=1;log.push(`${nm(i)} 的賈丘護盾破裂，獲得【綻放EGO：而立】`) }v=0}
+    if(!shieldResolveOnly&&v>0&&arr[i]>0&&valDodge(i,rm.chars[i],st[i],by,blackRank)){st[i].rupture=ruptureBefore;return 0}
+    if(!shieldResolveOnly)v=isoDamage(rm.chars[i],st[i],v,log,nm(i));
+    const fxStart=damage.length,shield=absorbShield(st[i],v),beforeShield=shield.before,a=shield.absorbed;v=shield.remaining;if(a>0){log.push(`${nm(i)} 的護盾吸收 ${a} 點傷害`+(v>0?`，剩餘 ${v} 點傷害繼續結算`:''));vergBreak(rm.chars[i],st[i],beforeShield,i,'護盾');if(rm.chars[i]==='jia_qiu'&&st[i].shield<=0&&!st[i].egoStanding){st[i].egoStanding=1;autoZilu[i]=1;log.push(`${nm(i)} 的賈丘護盾破裂，獲得【綻放EGO：而立】`) }}
     addDamageFx(damage,rm0,i,a,undefined,true);
-    let dealt;const nt=nutTake(i,v);
+    let dealt;const nt=shieldResolveOnly?null:nutTake(i,v);
     if(nt!==null)dealt=nt;else{const before=arr[i];
-      arr[i]=damagedHp(before,mx(i),v,rm.chars[i],st[i],log,nm(i),true);
+      arr[i]=damagedHp(before,mx(i),v,shieldResolveOnly?null:rm.chars[i],st[i],log,nm(i),true);
       addDamageFx(damage,rm0,i,recordHpLoss(rm0.chars[i],st[i],before,arr[i]));dealt=Math.max(0,before-arr[i])}
-    addCombatDamage(combat,rm0,by,damage,fxStart,kind,beforeShield);
-    environmentThorns(rm0,by,damage.slice(fxStart),log,damage,arr,st);
-    dealt+=a;loseValorantGun(rm.chars[i],st[i],nt===null?dealt:a,kind,log,nm(i)); // 護盾是臨時生命；實際扣盾亦算攻擊命中。
-    if(dealt>0){if(by!==undefined&&by!==null)hits.push(by);cpAdd(by,15);cpAdd(i,10);
+    const combatStart=combat.length;addCombatDamage(combat,rm0,source,damage,fxStart,kind,beforeShield);if(profile)combat.slice(combatStart).forEach(e=>e.sourceMember=profile.member);
+    environmentThorns(rm0,source,damage.slice(fxStart),log,damage,arr,st);
+    registerXichnExit(i,arr);dealt+=a;loseValorantGun(rm.chars[i],st[i],nt===null?dealt:a,kind,log,nm(i)); // 護盾是臨時生命；實際扣盾亦算攻擊命中。
+    if(dealt>0){if(source!==undefined&&source!==null)hits.push(source);cpAdd(source,15);cpAdd(i,10);
       if(by!==undefined&&rm.chars[by]==='verg'&&st[by].vergSword&&P[by]&&'SC'.includes(P[by].s)){const n=Math.ceil(P[by].r*.3);st[i].burn=(st[i].burn||0)+n;log.push(`${nm(i)} 被【超高溫羅馬短劍】附加 ${n} 層炎傷（共${st[i].burn}）`)}
       if(by!==undefined&&rm.chars[by]==='verg'&&kind==='counter'&&st[by].vergEgo){st[i].rufoBleed=(st[i].rufoBleed||0)+3;log.push(`${nm(i)} 被【血之洗禮】反擊命中，獲得3層流血（共${st[i].rufoBleed}）`)}
       if(by!==undefined&&rm.chars[by]==='ailan'&&dealt>5&&!st[i].superDeepTrauma&&!st[i].deepTrauma&&!st[i].traumaPending){st[i].trauma=(st[i].trauma||0)+1;log.push(`${nm(i)} 獲得1層創傷（共${st[i].trauma}層）`);if(st[i].trauma>=2){st[i].traumaPending=1;log.push(`${nm(i)} 的創傷將於下回合轉為深度創傷`)}}
@@ -2029,7 +2159,7 @@ function resolveBattle(rm0,mv,gs,sk,swaps,extra){if(isoPending(rm0))return rm0;i
         if(CHARS[rm0.chars[i]]?.f==='bus'&&rm0.chars[i]!=='verg'){const before=st[i].san||0;st[i].san=Math.max(-45,before-20);log.push(`${nm(by)} 的淚鋒命中，${nm(i)} 理智 ${st[i].san-before}（${st[i].san}）`)}
         else if(arr[i]>0){const extra=takeOne(arr,i,3,by,undefined,'fixed');log.push(`${nm(by)} 的淚鋒命中，${nm(i)} 沒有可變理智，追加3點固定傷害（實際${extra}）`)}
       }
-    }return dealt};
+    }kiraHit(arr,source,i,dealt,st[i],profile);kiraRelayDamage(combat.slice(combatStart));if(!profile)fingerHit(rm.chars[i],st[i],i,by,dealt,kind,arr,false,arr[i]>0);return dealt};
   const allies=es=>rm.cfg.boss&&es!==1?[0,2]:[es],enemies=es=>rm.cfg.boss?(es===1?[0,2]:[1]):rm.seats.map((_,j)=>j).filter(j=>j!==es);
   const teamAlive=es=>rm.team?rm.team[es].filter((m,k)=>canDeploy(m.c)&&(k===rm.act[es]?hp[es]>0:(rres[es]&&rres[es][k]!==undefined?rres[es][k]>0:!m.dead&&m.hp>0))).length:1;
   const halvedFor=es=>!!rm.team&&allies(es).reduce((n,j)=>n+teamAlive(j),0)>=2;
@@ -2042,60 +2172,114 @@ function resolveBattle(rm0,mv,gs,sk,swaps,extra){if(isoPending(rm0))return rm0;i
     if(m.c==='nut'&&!(nut[es]&&nut[es].hp>0))return 0;
     const cur=rres[es]&&rres[es][k]!==undefined?rres[es][k]:m.hp;if(cur<=0&&m.c!=='nut')return 0;
     if(v0>0&&(m.c!=='nut'||extra?.environmentDamage)&&(m.st.wall||0)>0){m.st.wall--;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 的大地之牆抵擋了傷害`);return 0}
-    let v=v0;const ruptureBefore=m.st.rupture||0;
+    let v=v0;const ruptureBefore=m.st.rupture||0;const revenge=by!==undefined&&isMiddleFinger(rm.chars[by])&&enemies(by).includes(es)?revengeStacks(fingerRoom(arr),by,m.st):0;if(kind!=='fixed'&&v>0&&revenge){v+=revenge;log.push(`${nm(es)} 的後備復仇對象使中指傷害+${revenge}`)}
     if(kind!=='fixed'){
     const fasterZilu=by!==undefined&&rm.chars[by]==='zilu'&&P[by]&&P[es]&&P[by].r<P[es].r;if((m.st.rupture||0)>0&&v>0){const n=m.st.rupture;v+=n;if(!fasterZilu)m.st.rupture--;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 破裂追加 ${n} 點傷害${fasterZilu?'（子路出牌較快，破裂不消耗）':''}`)}if(m.c!=='nut'){const b=calcBuffs(m.c,m.st);v=Math.max(0,v+b.vuln-b.guard);const rdv=redSt(m.c,m.st);if(v>0&&rdv>0)v=Math.ceil(v*(1-Math.min(.9,rdv))-1e-9)}
     if(v>0&&fm)v=Math.floor(v*fm+1e-9);if(v>0&&m.c==='heathcliff'&&((m.st.shieldSuit==='S'&&(suit==='S'||kind==='spade'))||(m.st.shieldSuit==='D'&&kind==='counter'))){v=Math.ceil(v/2);log.push(`${nm(es)} 的後備希斯克利夫${SU[m.st.shieldSuit]}盾使${kind==='counter'?'反擊':'黑桃'}傷害減半`)}
     }
     if(v>0&&!envSilent(rm0)&&valDodge(es,m.c,m.st,by,blackRank,k)){m.st.rupture=ruptureBefore;return 0}
     v=isoDamage(m.st.sealT>0||envSilent(rm0)?null:m.c,m.st,v,log,`${nm(es)} 的後備 ${CHARS[m.c].n}`);
-    const fxStart=damage.length,beforeShield=m.st.shield||0,sh=Math.min(beforeShield,v);if(sh>0){m.st.shield-=sh;m.st.shieldPersistent=Math.max(0,(m.st.shieldPersistent||0)-sh);log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 護盾吸收 ${sh} 點傷害`+(v>sh?`，並擋下溢出的 ${v-sh} 點傷害`:''));vergBreak(m.c,m.st,beforeShield,es,'後備護盾');v=0}
+    const fxStart=damage.length,shield=absorbShield(m.st,v),beforeShield=shield.before,sh=shield.absorbed;v=shield.remaining;if(sh>0){log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 護盾吸收 ${sh} 點傷害`+(v>0?`，剩餘 ${v} 點傷害繼續結算`:''));vergBreak(m.c,m.st,beforeShield,es,'後備護盾')}
     addDamageFx(damage,rm0,es,sh,k,true);
     let dealt=sh;const redirected=!!(nut[es]&&nut[es].hp>0&&v>0);
     if(v>0){if(nut[es]&&nut[es].hp>0)dealt+=nutTake(es,v)||0;else{rres[es]=rres[es]||{};rres[es][k]=Math.max(0,damagedHp(cur,characterMaxHp(rm0,es,m.c,m.st),v,envSilent(rm0)?null:m.c,m.st,log,`${nm(es)} 的後備 ${CHARS[m.c].n}`,true));const lost=recordHpLoss(m.c,m.st,cur,rres[es][k]);rres[es][k]=protectLife(m.st.sealT>0?'_':m.c,m.st,rres[es][k],`${nm(es)} 的後備 ${CHARS[m.c].n}`,log);addDamageFx(damage,rm0,es,cur-rres[es][k],k);dealt+=lost;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 受到${tag||'群體攻擊'} ${v} 點傷害`+(rres[es][k]<=0?'，倒下！':''))}}
-    addCombatDamage(combat,rm0,by,damage,fxStart,kind,beforeShield);
+    const combatStart=combat.length;addCombatDamage(combat,rm0,by,damage,fxStart,kind,beforeShield);
     environmentThorns(rm0,by,damage.slice(fxStart),log,damage,arr,st);
     loseValorantGun(m.c,m.st,redirected?sh:dealt,kind,log,`${nm(es)} 的後備 ${CHARS[m.c].n}`);
     if(dealt<=0)return 0;
     if(by!==undefined&&by!==null){hits.push(by);cpAdd(by,15);cpAdd(es,10)}
     if(by!==undefined&&rm.chars[by]==='zilu'){m.st.rupture=(m.st.rupture||0)+1;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 獲得1層破裂（共${m.st.rupture}層）`)}if(by!==undefined&&rm.chars[by]==='rufo'&&(st[by].rufoWolf||0)>0){m.st.rufoBleed=(m.st.rufoBleed||0)+1;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 獲得1層流血（共${m.st.rufoBleed}層）`)}if(by!==undefined&&rm.chars[by]==='verg'&&st[by].vergSword&&P[by]&&'SC'.includes(P[by].s)){const n=Math.ceil(P[by].r*.3);m.st.burn=(m.st.burn||0)+n;log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 被【超高溫羅馬短劍】附加 ${n} 層炎傷（共${m.st.burn}）`)}
-    return dealt};
+    kiraHit(arr,by,es,dealt,m.st);kiraRelayDamage(combat.slice(combatStart));fingerHit(m.c,m.st,es,by,redirected?sh:dealt,kind,arr,true,(rres[es]?.[k]??m.hp)>0,k);return dealt};
   const take=(arr,i,v,by,fm,kind,blackRank)=>{
     const dealt=takeOne(arr,i,v,by,fm,kind,blackRank);
     if(v>0&&by!==undefined&&by!==null&&by!==i&&rm.chars[by]==='heathcliff'&&st[by].dullahan&&enemies(by).includes(i)){
       enemies(by).forEach(es=>{
         if(es!==i&&arr[es]>0){const n=takeOne(arr,es,v,by,fm,kind,blackRank);if(n>0)got[es]=by;log.push(`${nm(by)} 的【杜拉罕】群體攻擊 ${nm(es)}：${v} 點（實際${n}）`)}
-        if(tcl)tcl[es].forEach((m,k)=>hitRes(es,k,v,fm,'杜拉罕群體攻擊',kind==='spade'?'S':undefined,by,kind,arr,blackRank));
+        if(tcl)tcl[es].forEach((m,k)=>{if(es===i&&k===xichnPrimary[i])return;hitRes(es,k,v,fm,'杜拉罕群體攻擊',kind==='spade'?'S':undefined,by,kind,arr,blackRank)});
       });
     }
     return dealt;
   };
   const playedBlackRank=i=>rm.chars[i]==='lucio'?P[i].base:+submittedMv[i].slice(1);
-  const groupRes=(a,v0,fm,arr=hp)=>{if(!rm.team)return;const kind=a.s==='S'?'spade':'club',blackRank=playedBlackRank(a.i);enemies(a.i).forEach(es=>{if(es!==a.o&&arr[es]>0)take(arr,es,v0,a.i,fm,kind,blackRank);tcl[es].forEach((m,k)=>{hitRes(es,k,v0,fm,'群體攻擊',a.s,a.i,kind,arr,blackRank)})})};
-  const slay=(t,by)=>{if(rm.chars[t]==='verg'){log.push(`${nm(t)} 受到斬殺效果，改為承受基礎生命值傷害（【超高溫羅馬短劍】常駐）`);const dealt=take(hp,t,envAttack(rm,rm.cfg.hp),by);if(dealt>0)log.push(`${nm(t)} 受到斬殺效果，承受基礎生命值 ${rm.cfg.hp} 點傷害`);return false}if(rm.chars[t]==='jia_qiu'){const dealt=take(hp,t,envAttack(rm,mx(t)),by);if(dealt>0)log.push(`${nm(t)} 受到斬殺效果，改為承受最大生命值傷害`);return false}if((st[t].wall||0)>0){st[t].wall--;log.push(`${nm(t)} 的大地之牆抵擋了斬殺`);return false}
-const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp,n.k);addCombatDamage(combat,rm0,by,damage,fxStart);environmentThorns(rm0,by,damage.slice(fxStart),log,damage,hp,st);n.hp=0;log.push(`${nm(t)} 受到的斬殺由高堅果承受，高堅果倒下！`);return false}const before=hp[t];hp[t]=0;recordHpLoss(rm0.chars[t],st[t],before,0);addDamageFx(damage,rm0,t,before);addCombatDamage(combat,rm0,by,damage,fxStart);environmentThorns(rm0,by,damage.slice(fxStart),log,damage,hp,st);spk[t]=1;return true};
+  const groupRes=(a,v0,fm,arr=hp)=>{if(!rm.team)return;const kind=a.s==='S'?'spade':'club',blackRank=playedBlackRank(a.i);enemies(a.i).forEach(es=>{if(es!==a.o&&arr[es]>0)take(arr,es,v0,a.i,fm,kind,blackRank);tcl[es].forEach((m,k)=>{if(es===a.o&&k===xichnPrimary[a.o])return;hitRes(es,k,v0,fm,'群體攻擊',a.s,a.i,kind,arr,blackRank)})})};
+  const slay=(t,by,profile)=>{registerXichnExit(t);if(xichnExits[t]){const x=xichnExits[t],k=x.to,m=tcl[t][k],before=rres[t]?.[k]??m.hp;if(before<=0)return false;
+    if(m.c==='verg'||m.c==='jia_qiu'){hitRes(t,k,envAttack(rm,m.c==='verg'?rm.cfg.hp:characterMaxHp(rm0,t,m.c,m.st)),undefined,'斬殺轉為傷害',undefined,by,'skill');return false}
+    if(m.st.wall>0){m.st.wall--;log.push(`${nm(t)} 的接替角色大地之牆抵擋斬殺`);return false}
+    const start=damage.length,n=nut[t];if(n?.hp>0){addDamageFx(damage,rm0,t,n.hp,n.k);n.hp=0}else{rres[t]=rres[t]||{};rres[t][k]=0;recordHpLoss(m.c,m.st,before,0);addDamageFx(damage,rm0,t,before,k);spk[t]=1;x.slain=true}
+    const combatStart=combat.length;addCombatDamage(combat,rm0,by,damage,start);if(profile)combat.slice(combatStart).forEach(e=>e.sourceMember=profile.member);environmentThorns(rm0,by,damage.slice(start),log,damage,hp,st);kiraHit(hp,by,t,damage.slice(start).reduce((n,e)=>n+e.amount,0),m.st,profile);kiraRelayDamage(combat.slice(combatStart));return !!x.slain;
+  }if(rm.chars[t]==='verg'){log.push(`${nm(t)} 受到斬殺效果，改為承受基礎生命值傷害（【超高溫羅馬短劍】常駐）`);const dealt=profile?takeOne(hp,t,envAttack(rm,rm.cfg.hp),by,undefined,undefined,undefined,profile):take(hp,t,envAttack(rm,rm.cfg.hp),by);if(dealt>0)log.push(`${nm(t)} 受到斬殺效果，承受基礎生命值 ${rm.cfg.hp} 點傷害`);return false}if(rm.chars[t]==='jia_qiu'){const dealt=profile?takeOne(hp,t,envAttack(rm,mx(t)),by,undefined,undefined,undefined,profile):take(hp,t,envAttack(rm,mx(t)),by);if(dealt>0)log.push(`${nm(t)} 受到斬殺效果，改為承受最大生命值傷害`);return false}if((st[t].wall||0)>0){st[t].wall--;log.push(`${nm(t)} 的大地之牆抵擋了斬殺`);return false}
+const fxStart=damage.length,combatStart=combat.length,n=nut[t];const finish=()=>{const events=combat.slice(combatStart);if(profile)events.forEach(e=>e.sourceMember=profile.member);kiraHit(hp,by,t,events.reduce((n,e)=>n+e.amount,0),st[t],profile);kiraRelayDamage(events)};if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp,n.k);addCombatDamage(combat,rm0,by,damage,fxStart);environmentThorns(rm0,by,damage.slice(fxStart),log,damage,hp,st);n.hp=0;log.push(`${nm(t)} 受到的斬殺由高堅果承受，高堅果倒下！`);finish();return false}const before=hp[t];hp[t]=0;recordHpLoss(rm0.chars[t],st[t],before,0);addDamageFx(damage,rm0,t,before);addCombatDamage(combat,rm0,by,damage,fxStart);environmentThorns(rm0,by,damage.slice(fxStart),log,damage,hp,st);spk[t]=1;finish();return true};
   const ls=(a,v,arr)=>{if(!(arr[a.i]>0))return;if(healingBlocked(st[a.i])){log.push(`${nm(a.i)} 的吸血無效（超深度創傷：永久禁療）`);return}let amt=Math.max(1,Math.ceil(v*0.3));if(boost[a.i]&&a.s==='S')amt*=boost[a.i]===2?3:2;
     amt=envHeal(rm,amt);const g=healedHp(arr[a.i],mx(a.i),amt,rm.chars[a.i],st[a.i],log,nm(a.i))-arr[a.i];if(g<=0)return;arr[a.i]+=g;recordHeal(a.i,g,a.i,'drain',arr);if(!lock[a.i]){const add=st[a.i].feastBoost?Math.round(g*1.5):g;st[a.i].feast+=add}log.push(`${nm(a.i)} 吸血 +${g}`)};
+  if(Number.isInteger(extra?.drunkSlash)){
+    const a=extra.drunkSlash,group=!!extra.drunkGroup,target=rm.pair.find(j=>j!==a&&enemies(a).includes(j)&&hp[j]>0)??enemies(a).find(j=>hp[j]>0);
+    if(rm.chars[a]!=='drunk'||hp[a]<=0||!group&&st[a].drunkSip<10)return {...rm0,instantResult:{log:['小酌需達10層。'],hits:[],damage:[],combat:[],healing:[],soundCues:[]}};
+    const b=calcBuffs('drunk',st[a]),raw=group?(st[a].drunkSip||0)*2*(environmentMembers({...rm0,hp,st,team:tcl}).filter(m=>enemies(a).includes(m.i)).length<=1?2:1):1,targets=group?enemies(a):target===undefined?[]:[target],v=raw>0?dm(a,Math.max(0,Math.floor(raw*prevMult('drunk',st[a],'S')+1e-9)+b.strong-b.weak)):0;
+    for(let n=0;n<(group?1:10);n++){targets.forEach(es=>{if(hp[es]>0)take(hp,es,v,a,undefined,'drunkSlash');if(group&&tcl)tcl[es].forEach((m,k)=>hitRes(es,k,v,undefined,'真•真鎮終斬',undefined,a,'drunkSlash'))});guard()}
+    log.push(`${nm(a)} 發動【${group?'真•真鎮終斬':'真鎮終斬'}】（${group?'小酌×2群體傷害':'基礎1點連擊10次'}），不消耗小酌。`);
+    const state=settleResolved({instant:true}),next={...rm0,...state,hands:{...rm0.hands},up:{...rm0.up}};Object.assign(next,syncDrunkHands(next));targets.forEach(es=>removeDrunkDarkSlot(next,es,log));settleInstantBattle(next,log,true);
+    return {...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,soundCues,charactersSettled:true}};
+  }
+  if(Number.isInteger(extra?.xichnEntry)||Number.isInteger(extra?.xichnUltimate)){
+    const entry=Number.isInteger(extra.xichnEntry),a=entry?extra.xichnEntry:extra.xichnUltimate,target=rm.pair.find(j=>j!==a&&enemies(a).includes(j)&&hp[j]>0)??enemies(a).find(j=>hp[j]>0);
+    if(rm.chars[a]!=='xichn'||hp[a]<=0)return {...rm0,instantResult:{log:[],damage:[],combat:[],healing:[],hits:[]}};
+    const waits=st[a].xichnWait||0,group=entry&&waits>=5,base=entry?Math.min(3,waits):15,b=calcBuffs('xichn',st[a]);if(entry)st[a].xichnWait=0;
+    const raw=base*(group&&!enemyGroup(a)?2:1),v=entry?raw:base>0?dm(a,Math.max(0,Math.floor(raw*prevMult('xichn',st[a],'S')+1e-9)+b.strong-b.weak)):0;
+    const targets=group?enemies(a):target===undefined?[]:[target];targets.forEach(es=>{if(hp[es]>0)take(hp,es,v,a,undefined,entry?'fixed':'ultimate');if(group&&tcl)tcl[es].forEach((m,k)=>hitRes(es,k,v,undefined,'始動',undefined,a,'fixed'));if(!entry&&hp[es]>0)st[es].paralysis=Math.max(st[es].paralysis||0,1)});
+    if(hits.includes(a))soundCues.push({seat:a,file:'assets/audio/sfx/characters/attack_xichun.mp3',replaceAttack:true});
+    log.push(`${nm(a)} 發動【${entry?'始動':'醉睡浪浪春'}】${entry?`，消耗${waits}層待，一次固定${raw}點${group?'群體':''}單方面攻擊`:'，目前對手受到基礎15點傷害並獲得1回合麻痺'}。`);
+    guard();const state=settleResolved({instant:true}),next={...rm0,...state};settleInstantBattle(next,log,true);return {...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,soundCues,charactersSettled:true}};
+  }
+  if(['kiraDad','kiraViolet','kiraSacrifice'].some(key=>Number.isInteger(extra?.[key]))){
+    const key=['kiraDad','kiraViolet','kiraSacrifice'].find(key=>Number.isInteger(extra?.[key])),a=extra[key],empty=message=>({...rm0,instantResult:{log:[message],hits:[],damage:[],combat:[],healing:[],soundCues:[]}});
+    if(rm.chars[a]!=='kira'||!(hp[a]>0)||!rm.pair.includes(a))return empty('綺羅需存活且正在出戰才可發動。');
+    if(key==='kiraDad'&&!(st[a].kiraDadUses>0))return empty('老爸技能尚未取得使用資格。');
+    const target=rm.pair.find(j=>j!==a&&enemies(a).includes(j)&&hp[j]>0);if(target===undefined)return empty('沒有目前對戰的存活對手。');
+    const forcedSwaps={},relays=JSON.parse(JSON.stringify(rm0.kiraRelays||[])),noPlay={...(rm0.kiraNoPlay||{})};
+    if(key==='kiraSacrifice'){
+      const member=kiraMatMember(fingerRoom(hp),a);if(!member)return empty('隊伍需有存活馬蒂亞斯才可發動此技能。');
+      const matSt=member.k<0?st[a]:tcl[a][member.k].st,heat=st[a].kiraHeat||0;matSt.asuraStrong=(matSt.asuraStrong||0)+1+heat;matSt.wrap=0;
+      const profile=member.k<0?null:{c:'mat',s:matSt,member:member.k};slay(target,a,profile);(st[target].fingerRevenge||{})[middleFingerSide(rm0,a)]=0;slay(a,a,profile);
+      log.push(`${nm(a)} 發動【嗚哇...好像超不妙的？】，馬蒂亞斯以【萊萬汀】同時斬殺綺羅與目前對手，永久強壯+${1+heat}。`);
+    }else{
+      const total=key==='kiraViolet'?fingerRevengeTotal(fingerRoom(hp)):0,base=key==='kiraDad'?5:total*6,b=calcBuffs(rm.chars[a],st[a]),v=key==='kiraDad'?5:base>0?dm(a,Math.max(0,Math.floor(base*prevMult(rm.chars[a],st[a],'S')+1e-9)+b.strong-b.weak)):0;
+      if(key==='kiraDad')st[a].kiraDadUses--;
+      soundCues.push({seat:a,file:kiraSoundFile(key==='kiraDad'?4:3),replaceAttack:true});const dealt=takeOne(hp,target,v,a,undefined,key==='kiraDad'?'kiraFixed':'skill');
+      log.push(`${nm(a)} 發動【${key==='kiraDad'?'這樣做就可以了吧，老爸':'紫羅蘭破壞猛擊'}】，${key==='kiraDad'?'固定5點':`復仇對象總和${total}×6＝${base}點基礎`}傷害（實際${dealt}）。`);
+      if(key==='kiraDad'&&tcl){const choices=tcl[a].map((m,k)=>({m,k})).filter(({m,k})=>k!==rm.act[a]&&isMiddleFinger(m.c)&&canDeploy(m.c)&&!m.dead&&(rres[a]?.[k]??m.hp)>0);if(choices.length){const pick=rnd(choices);forcedSwaps[a]=pick.k;noPlay[target]=rm0.round;relays.push({round:rm0.round,seat:a,member:pick.k,kira:rm.act[a]});log.push(`${nm(target)} 本回合無法出牌；綺羅換上${CHARS[pick.m.c].n}，該成員本回合造成的傷害會等量反傷綺羅。`)}}
+    }
+    guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,forcedSwaps,log,passChars:rm.chars,instant:true}),next={...rm0,...state,kiraRelays:relays,kiraNoPlay:noPlay};settleInstantBattle(next,log,true);normalizeFingerRevenge(next);
+    return {...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,soundCues,charactersSettled:true}};
+  }
+  if(Number.isInteger(extra?.lkdHaircut)||Number.isInteger(extra?.lkdExecution)){
+    const haircut=Number.isInteger(extra.lkdHaircut),a=haircut?extra.lkdHaircut:extra.lkdExecution;
+    if(haircut&&!(st[a].lkdHaircuts>0))return {...rm0,instantResult:{log:['理髮卷尚未取得使用資格。'],hits:[],damage:[],combat:[],healing:[],soundCues:[]}};
+    const targets=enemies(a).filter(j=>hp[j]>0),target=rm.pair.find(j=>j!==a&&targets.includes(j))??targets[0];
+    if(haircut){st[a].lkdHaircuts--;soundCues.push({seat:a,file:lkdSoundFile(3),replaceAttack:true});if(target!==undefined){const n=take(hp,target,10,a,undefined,'fixed');log.push(`${nm(a)} 發動【我的理髮卷！！！！！！！】，對 ${nm(target)} 造成10點固定傷害（實際${n}）`)}}
+    else{const b=calcBuffs(rm.chars[a],st[a]),v=dm(a,Math.max(0,Math.floor(15*prevMult(rm.chars[a],st[a],'S')+1e-9)+b.strong-b.weak));enemies(a).forEach(es=>{if(hp[es]>0)take(hp,es,v,a,undefined,'ultimate');if(tcl)tcl[es].forEach((m,k)=>hitRes(es,k,v,undefined,'全員處刑',undefined,a,'ultimate'))});log.push(`${nm(a)} 發動【全員處刑】，所有存活敵人含後備各受到基礎15點傷害。`)}
+    guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};settleInstantBattle(next,log,true);normalizeFingerRevenge(next);
+    return {...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,soundCues,charactersSettled:true}};
+  }
   if(Number.isInteger(extra?.lucioUltimate)){
     const a=extra.lucioUltimate;st[a].lucio25=1;let count=0;
     const strike=(es,k,s0)=>{const stacks=s0.duelClimax||0;if(!stacks)return;const base=4*stacks,dealt=k===undefined?take(hp,es,base,a,undefined,'skill'):hitRes(es,k,base,undefined,'解鹿',undefined,a,'skill');count++;log.push(`${nm(es)}${k===undefined?'':` 的後備 ${CHARS[tcl[es][k].c].n}`} 受到【解鹿】：4×${stacks}＝${base}點基礎傷害（實際${dealt}）`)};
     // 基礎傷害不走攻擊方威力／環境加成；take及hitRes保留受擊方防護。
     enemies(a).forEach(es=>{if(hp[es]>0)strike(es,undefined,st[es]);if(tcl)tcl[es].forEach((m,k)=>{if(k!==rm.act[es]&&!m.dead&&m.hp>0&&m.c!=='nut')strike(es,k,m.st)});if(tcl&&nut[es]?.hp>0)strike(es,nut[es].k,tcl[es][nut[es].k].st)});
     if(!count)log.push('【解鹿】沒有帶有決鬥高潮的存活敵人');
-    guard();const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(Number.isInteger(extra?.sadUltimate)){
     const a=extra.sadUltimate,target=rm.pair.find(j=>j!==a&&enemies(a).includes(j)&&hp[j]>0)??enemies(a).find(j=>hp[j]>0),used=st[a].sadCounters||0;
     if(target!==undefined){const held=(rm.hands[target]||[]).filter(c=>c[0]==='D').length+(hostSunCards[target]||[]).filter(c=>c.expires>=rm.round&&c.card[0]==='D').length,base=(used+held)*3,v=dm(a,base),dealt=take(hp,target,v,a);if(dealt>0)got[target]=a;log.push(`${nm(a)} 發動【阿卡納裂淚穿刺】：已出方塊${used}張＋對手手牌方塊${held}張，基礎傷害（${used}＋${held}）×3＝${base}，實際${dealt}`)}
     else log.push('【阿卡納裂淚穿刺】沒有存活的敵方目標');
-    guard();const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(Number.isInteger(extra?.tktUltimate)){
     const a=extra.tktUltimate,target=rm.pair.find(j=>j!==a&&enemies(a).includes(j)&&hp[j]>0)??enemies(a).find(j=>hp[j]>0),n=Math.max(1,rm.round-(rm.roundBase||1)+1);
     if(target!==undefined){const dealt=take(hp,target,n,a,undefined,'fixed');log.push(`${nm(a)} 發動【時間殺人魔】：第${n}回合，對 ${nm(target)} 造成${n}點固定傷害（實際${dealt}）`)}else log.push('【時間殺人魔】沒有存活的敵方目標');
-    guard();const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(Number.isInteger(extra?.firefuUltimate)){
@@ -2103,12 +2287,12 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     rm.seats.forEach((_,i)=>{if(hp[i]>0)take(hp,i,20,a,undefined,'skill');
       if(tcl)tcl[i].forEach((m,k)=>{if(k!==rm.act[i]&&!m.dead&&m.hp>0&&m.c!=='nut')hitRes(i,k,20,undefined,'最大感應-[劣化侵蝕]',undefined,a,'skill')});
       if(nut[i]?.hp>0)hitRes(i,nut[i].k,20,undefined,'最大感應-[劣化侵蝕]',undefined,a,'skill');
-    });guard();const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    });guard();const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(Array.isArray(extra?.timeExpired)){
     extra.timeExpired.forEach(i=>{if(!rm.pair.includes(i)||!(hp[i]>0))return;const before=hp[i];hp[i]=0;spk[i]=1;recordHpLoss(rm0.chars[i],st[i],before,0);addDamageFx(damage,rm0,i,before);log.push(`⌛【閉嘴，時間由我分配】${nm(i)} 未在5秒內出牌，出戰角色直接死亡！`)});
-    const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[],damage,combat:[],healing:[],charactersSettled:true}};
   }
   if(extra?.environmentDamage){
@@ -2118,7 +2302,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
       // 高堅果先承受隊友傷害，再承受自身的一次烈日，避免重複扣同一角色。
       if(nut[i]&&nut[i].hp>0){hitRes(i,nut[i].k,n,undefined,'烈日',undefined,undefined,'fixed')}
     });guard();
-    const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[],damage,combat,healing,charactersSettled:true}};
   }
   if(extra&&extra.heathcliffUltimate!==undefined){
@@ -2126,7 +2310,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     st[a].coffin=0;log.push(`${nm(a)} 消耗所有${coffins}層棺，單體基礎傷害${coffins}×4＝${coffins*4}`);
     if(target!==undefined){const v=dm(a,coffins*4),dealt=take(hp,target,v,a);if(dealt>0)got[target]=a;log.push(`對 ${nm(target)} 造成${v}點傷害（實際${dealt}）`);guard()}
     else log.push('沒有存活的敵方目標');
-    const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(extra&&extra.yisangUltimate!==undefined){
@@ -2135,7 +2319,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
       if(tcl)tcl[es].forEach((m,k)=>{if(k===rm.act[es]||m.dead||m.c==='nut')return;const cur=rres[es]?.[k]??m.hp;if(cur>0)hitRes(es,k,dm(a,3),undefined,'強制平等',undefined,a)});
       if(tcl&&nut[es]?.hp>0)hitRes(es,nut[es].k,dm(a,3),undefined,'強制平等',undefined,a);
     });guard();
-    const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
   if(extra&&(extra.leiUltimate!==undefined||extra.vergUltimate!==undefined)){
@@ -2144,10 +2328,10 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     for(let hit=1;hit<=count;hit++){
       enemies(a).forEach(es=>{
         if(hp[es]>0){const raw=roll(),dealt=take(hp,es,raw,a,undefined,kind);if(dealt>0)got[es]=a;log.push(`　第${hit}擊 → ${nm(es)}（${CHARS[rm0.chars[es]]?.n||'角色'}）：${fixed?'固定':''}${raw}，實際傷害${dealt}`);guard()}
-        if(tcl)tcl[es].forEach((m,k)=>{if(k===rm.act[es]||m.dead)return;const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[k]??m.hp);if(cur<=0)return;const raw=roll(),dealt=hitRes(es,k,raw,undefined,label,undefined,a,kind);log.push(`　第${hit}擊 → ${nm(es)} 的後備 ${CHARS[m.c].n}：${fixed?'固定':''}${raw}，實際傷害${dealt}`)})
+        if(tcl)tcl[es].forEach((m,k)=>{if(k===rm.act[es]||k===xichnPrimary[es]||m.dead)return;const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[k]??m.hp);if(cur<=0)return;const raw=roll(),dealt=hitRes(es,k,raw,undefined,label,undefined,a,kind);log.push(`　第${hit}擊 → ${nm(es)} 的後備 ${CHARS[m.c].n}：${fixed?'固定':''}${raw}，實際傷害${dealt}`)})
       });
     }
-    const state=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
+    const state=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,instant:true}),next={...rm0,...state};
     settleInstantBattle(next,log,true);
     return{...next,instantResult:{log,hits:[...new Set(hits)],damage,combat,healing,charactersSettled:true}};
   }
@@ -2193,7 +2377,6 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
       }
     }
   });
-  const rvx=(a,b)=>(rm.st[a].rv&&rm.st[a].rv[b])||0;
   const ps=Object.values(P),heal={},healAlive={},isA=p=>aceOn&&p.r===1&&valorantGun(rm.chars[p.i],st[p.i])!==VALORANT_GUNS.odin,handCount=i=>(rm.hands[i]||[]).length+(hostSunCards[i]||[]).length;
   const T=ps.filter(p=>sk&&sk[p.i]&&rm.chars[p.i]==='yoshi'&&handCount(p.i)>=2&&!(rm.st[p.i].yoshiCd>0)),cut={};
   const rep=sk?rm.pair.find(i=>sk[i]&&rm.chars[i]==='rien'&&!mv[i]&&(rm.st[i].grace||0)>=9&&!rm.st[i].repUsed):undefined;
@@ -2215,7 +2398,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
       if(colored){
         let count=0;enemies(i).forEach(es=>{
           if(hp[es]>0){const n=take(hp,es,v,i,factor);if(v>0)got[es]=i;count++;log.push(`　【爆裂呈現】第${k+1}擊 → ${nm(es)}（群體×${factor}）：${v} 點，實際${n}`)}
-          if(tcl)tcl[es].forEach((m,j)=>{const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[j]??m.hp);if(j===rm.act[es]||m.dead||cur<=0)return;const n=hitRes(es,j,v,factor,'爆裂呈現・群體攻擊','S',i);count++;log.push(`　【爆裂呈現】第${k+1}擊 → ${nm(es)} 的後備 ${CHARS[m.c].n}（群體×${factor}）：${v} 點，實際${n}`)});
+          if(tcl)tcl[es].forEach((m,j)=>{const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[j]??m.hp);if(j===rm.act[es]||j===xichnPrimary[es]||m.dead||cur<=0)return;const n=hitRes(es,j,v,factor,'爆裂呈現・群體攻擊','S',i);count++;log.push(`　【爆裂呈現】第${k+1}擊 → ${nm(es)} 的後備 ${CHARS[m.c].n}（群體×${factor}）：${v} 點，實際${n}`)});
         });
         if(!count)log.push(`　【爆裂呈現】第${k+1}擊：沒有存活的敵方目標`);
         guard();continue;
@@ -2233,13 +2416,13 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     P[i].r=envRank(rm,st[i],mv[i],P[i].r,mv[P[i].o]);
     if(assassinZero(rm,mv[P[i].o]))log.push(`🗡️【刺客】${nm(i)} 遇上對手的A／2／3，最終點數歸零`);
   });
-  rm.pair.forEach(i=>{if(rm.chars[i]==='sad'&&mv[i]){P[i].sadEmpowered=sadEmpowered(st[i]);if(P[i].sadEmpowered)log.push(`${nm(i)} 的淚鋒使本張牌點數+5，命中附帶理智削減或追加傷害`)}});
+  rm.pair.forEach(i=>{if(rm.chars[i]==='sad'&&mv[i]){P[i].sadEmpowered=sadEmpowered(st[i]);if(P[i].sadEmpowered)log.push(`${nm(i)} 的淚鋒使本張牌點數+6，命中附帶理智削減或追加傷害`)}});
   const assassinTargets=rm.pair.filter(i=>mv[i]&&assassinZero(rm,mv[P[i].o]));if(assassinTargets.length)cueEnvironment('assassin','impact',assassinTargets,'A／2／3破解刺客・點數歸零');
   Object.keys(ohNew).forEach(i=>{st[i].fx=(st[i].fx||[]).concat([{k:'w',n:3,t:99999,oh:1}]);log.push(`${nm(+i)} 獲得【過熱】：3 層虛弱（永久）`)});
   const gunRank=p=>{if(!isValorant(rm.chars[p.i])||!mv[p.i])return p.r;let rank=effRank(rm.chars[p.i],st[p.i],mv[p.i],multOf(p.i,p.s));if(st[p.i].torchRound===rm.round)rank*=2;return envRank(rm,st[p.i],mv[p.i],rank,mv[p.o])};
   const gunCount=p=>valorantTriggers(rm.chars[p.i],st[p.i],mv[p.i]);
-  const rdwSeat=extra&&extra.redraw;let redrawDo;
-  if(rdwSeat!==undefined){const i=rdwSeat,dmgs=redrawCost(rm,i);if(rm.env?.supply[i]>0){rm.env=JSON.parse(JSON.stringify(rm.env));rm.env.supply[i]--;queueEnvironmentFx(rm,'supply','redeem');log.push(`${nm(i)} 消耗一次補給折抵（換牌生命消耗-5）`)}if(dmgs>0&&nutTake(i,dmgs)===null){const before=hp[i];hp[i]=damagedHp(before,mx(i),dmgs,rm.chars[i],st[i],log,nm(i));addDamageFx(damage,rm0,i,recordHpLoss(rm0.chars[i],st[i],before,hp[i]))}guard();redrawDo=i;
+  const rdwSeat=extra&&extra.redraw;let redrawDo,redrawFree=false;
+  if(rdwSeat!==undefined){const i=rdwSeat,dmgs=redrawCost(rm0,i);redrawFree=freeLkdRedraw(rm0,i);if(redrawFree){st[i].lkdRedraws--;log.push(`${nm(i)} 使用全體集合免費換牌（剩${st[i].lkdRedraws}次）`)}if(!redrawFree&&rm.env?.supply[i]>0){rm.env=JSON.parse(JSON.stringify(rm.env));rm.env.supply[i]--;queueEnvironmentFx(rm,'supply','redeem');log.push(`${nm(i)} 消耗一次補給折抵（換牌生命消耗-5）`)}if(dmgs>0&&nutTake(i,dmgs)===null){const before=hp[i];hp[i]=damagedHp(before,mx(i),dmgs,rm.chars[i],st[i],log,nm(i));addDamageFx(damage,rm0,i,recordHpLoss(rm0.chars[i],st[i],before,hp[i]))}guard();redrawDo=i;
     log.push(`${nm(i)} 喊出「我牌太爛啦！」：受到 ${dmgs} 點傷害，重新抽取手牌，本回合直接結束`)}
   else if(rep!==undefined){const d=[...hp];
     log.push(`${nm(rep)} 發動【Furioso-Replica】！本回合直接結束，單方面連續攻擊 9 次`);
@@ -2273,7 +2456,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     if(dealt>0){hits.push(p.i);effd[p.i]=1;got[q.i]=p.i;ringHit(p.i,q.i,dealt,false)}guard()});
   ps.filter(p=>rm.chars[p.i]==='moses'&&st[p.i].crimsonBreathRound===rm.round&&hp[p.i]>0).forEach(p=>{const target=p.o;if(hp[target]<=0)return;const real=slay(target,p.i);hits.push(p.i);got[target]=p.i;effd[p.i]=1;log.push(`${nm(p.i)} 發動【吐息-深紅】（先於萊萬汀）${real?`，${nm(target)} 被直接斬殺！`:'，依斬殺防護規則結算'}`);guard()});
   const mt=ps.find(p=>sk&&sk[p.i]&&rm.chars[p.i]==='mat'&&hp[p.i]>0&&rm.st[p.i].wrap>=3&&matTarget(rm,p.i,hp)>=0);
-  if(mt){const t=matTarget(rm,mt.i,hp);const real=slay(t,mt.i);hits.push(mt.i);got[t]=mt.i;st[mt.i].wrap=0;log.push(`${nm(mt.i)} 發動【萊萬汀】`+(real?`，${nm(t)} 被直接擊殺！`:'！'))}
+  if(mt){const t=matTarget(rm,mt.i,hp);const real=slay(t,mt.i);hits.push(mt.i);got[t]=mt.i;st[mt.i].wrap=0;(st[t].fingerRevenge||{})[middleFingerSide(rm0,mt.i)]=0;log.push(`${nm(mt.i)} 發動【萊萬汀】`+(real?`，${nm(t)} 被直接擊殺！`:'！'))}
   const sn=ps.find(p=>sk&&sk[p.i]&&rm.chars[p.i]==='san'&&rm.st[p.i].feast>=5&&hp[p.i]>0);
   if(sn){const tier=rm.st[sn.i].feast>=10?2:1;boost[sn.i]=tier;lock[sn.i]=1;st[sn.i].feast-=tier*5;log.push(`${nm(sn.i)} 發動【血宴強化・${tier}階】（${SU[sn.s]}）`);
     if(sn.s==='D'){st[sn.i].shield=(st[sn.i].shield||0)+5;st[sn.i].shNew=rm.turn===sn.i;st[sn.i].shTail=0;st[sn.i].shExtra=tier===2?2:0;log.push(`${nm(sn.i)} 獲得 5 點臨時護盾`);
@@ -2300,44 +2483,50 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     log.push(`${nm(a.i)} 被成功反擊，發動【斷汝筋骨】${st[a.i].bambooEgo?'群體攻擊（含敵方後備）':''}，四次斬擊分開結算`);
     for(let hit=1;hit<=4&&d[a.i]>0;hit++){const v=dm(a.i,Math.max(0,Math.floor(4*multOf(a.i,'S')+1e-9)+b.strong-b.weak));
       targets.forEach(es=>{if(d[es]>0){const dealt=take(d,es,v,a.i,undefined,'spade');if(dealt>0){got[es]=a.i;effd[a.i]=1}log.push(`　【斷汝筋骨】第${hit}斬 → ${nm(es)}：${v}點傷害（實際${dealt}）`)}
-        if(st[a.i].bambooEgo&&tcl)tcl[es].forEach((m,k)=>{const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[k]??m.hp);if(k===rm.act[es]||m.dead||cur<=0)return;const dealt=hitRes(es,k,v,undefined,'斷汝筋骨','S',a.i,'spade',d);if(dealt>0)effd[a.i]=1;log.push(`　【斷汝筋骨】第${hit}斬 → ${nm(es)} 的後備 ${CHARS[m.c].n}：${v}點傷害（實際${dealt}）`)})
+        if(st[a.i].bambooEgo&&tcl)tcl[es].forEach((m,k)=>{const cur=m.c==='nut'?(nut[es]?.hp||0):(rres[es]?.[k]??m.hp);if(k===rm.act[es]||k===xichnPrimary[es]||m.dead||cur<=0)return;const dealt=hitRes(es,k,v,undefined,'斷汝筋骨','S',a.i,'spade',d);if(dealt>0)effd[a.i]=1;log.push(`　【斷汝筋骨】第${hit}斬 → ${nm(es)} 的後備 ${CHARS[m.c].n}：${v}點傷害（實際${dealt}）`)})
       });guard0(d);
     }
   };
   const group=(list,dmg)=>{const act=list.filter(a=>hp[a.i]>0&&hp[a.o]>0&&!a.v),d=[...hp];
-    act.forEach(a=>{const tg=P[a.o],rk=rm.chars[a.i]==='rean'&&artNow[a.i]==='roku'&&'SC'.includes(a.s),lk=!!(leiU[a.i]&&leiU[a.i].quick)&&a.s==='S',lh=lk&&(rm.cfg.boss&&a.i===1||enemyGroup(a.i)),lfm=lk?(lh?.6:1.2):undefined;
+    act.forEach(a=>{const growthStart=combat.length,tg=P[a.o],rk=rm.chars[a.i]==='rean'&&artNow[a.i]==='roku'&&'SC'.includes(a.s),lk=!!(leiU[a.i]&&leiU[a.i].quick)&&a.s==='S',lh=lk&&(rm.cfg.boss&&a.i===1||enemyGroup(a.i)),lfm=lk?(lh?.6:1.2):undefined;
       const reflect=()=>{if(!rk)addCounterGuard(combat,rm0,a.i,a.o);const count=gunCount(tg);let total=0;
-        for(let hit=0;hit<count&&(hit===0||d[a.i]>0);hit++){const gun=valorantGun(rm.chars[tg.i],st[tg.i]),base=(isA(tg)?mx(tg.i)-hp[tg.i]:gunRank(tg))+rvx(tg.i,a.i),v=dm(tg.i,base*(gun===VALORANT_GUNS.judge?2:1)),dealt=take(d,a.i,v,tg.i,undefined,'counter');total+=v;if(dealt>0){hits.push(a.o);if(rm.chars[a.o]==='rufo')rufoTaskEvents[a.o].D=true}ringHit(a.o,a.i,dealt,false);if(rm.chars[tg.i]==='san')ls({i:tg.i,s:'D'},v,d);if(count>1)guard0(d)}
+        for(let hit=0;hit<count&&(hit===0||d[a.i]>0);hit++){const gun=valorantGun(rm.chars[tg.i],st[tg.i]),base=(isA(tg)?mx(tg.i)-hp[tg.i]:gunRank(tg)),v=dm(tg.i,base*(gun===VALORANT_GUNS.judge?2:1)),dealt=take(d,a.i,v,tg.i,undefined,'counter');total+=v;if(dealt>0){hits.push(a.o);if(rm.chars[a.o]==='rufo')rufoTaskEvents[a.o].D=true}ringHit(a.o,a.i,dealt,false);if(rm.chars[tg.i]==='san')ls({i:tg.i,s:'D'},v,d);if(count>1)guard0(d)}
         got[a.i]=a.o;refl[a.i]=1;cntd[a.o]=1;effd[a.o]=1;d25Success[a.o]=true;if(rm.chars[tg.i]==='mat')wrapUp[tg.i]=1;log.push(`${nm(a.o)} 的方塊${rk?'無法擋下六連疾風，但仍':'免疫攻擊並'}反擊 ${nm(a.i)} ${total} 點${count>1?'（'+count+'次效果分開結算）':''}${isA(tg)?'（♦A：損失的生命量）':''}`);if(a.bambooSkin)bambooSlash(a,d)};
       if(tg.s==='D'&&!rk&&!tg.corrodeDiamond)reflect();
       else if(a.bambooSkin){const dealt=take(d,a.o,isoAdapt?0:3,a.i,undefined,'fixed',playedBlackRank(a.i));if(dealt>0){effd[a.i]=1;d25Success[a.i]=true;got[a.o]=a.i}log.push(`${nm(a.i)} 的【捨吾皮肉】對 ${nm(a.o)} 造成固定3點傷害（實際${dealt}），不附原黑牌效果`)}
       else{const count=gunCount(a),gun=valorantGun(rm.chars[a.i],st[a.i]);
-        for(let hit=0;hit<count&&(hit===0||d[a.i]>0&&d[a.o]>0);hit++){let b0=dmg({...a,r:gunRank(a)});const hv=rk&&(rm.cfg.boss&&a.i===1||enemyGroup(a.i));if(hv)b0=Math.ceil(b0/2);const v=isoAdapt?0:envBlackDamage(rm,dm(a.i,b0+rvx(a.i,a.o)),a.s),dodgeBefore=valDodged[a.o]||0,dealt=take(d,a.o,v,a.i,lfm,a.s==='S'?'spade':'club',playedBlackRank(a.i)),dodged=(valDodged[a.o]||0)>dodgeBefore;if(dealt>0){hits.push(a.i);effd[a.i]=1;if(rm.chars[a.i]==='rufo'&&a.s==='S')rufoTaskEvents[a.i].S=true}ringHit(a.i,a.o,dealt,a.s==='C');if(v>0&&!dodged)got[a.o]=a.i;if(rm.chars[a.i]==='san'&&!dodged)ls(a,v,d);if(a.s==='S'&&dealt>0)d25Success[a.i]=true;log.push(`${nm(a.i)} 的${SU[a.s]}${count>1?'第'+(hit+1)+'次觸發':''}對 ${nm(a.o)} 造成 ${dodged?0:v} 點傷害${dodged?'（預知眼閃避）':''}`);if(lh)groupRes(a,v,.6,d);if(lk)log.push(`快刀亂麻（${lh?'群體・最終傷害×0.6':'單體・效果翻倍，最終傷害×1.2'}）`);if(rk){log.push(`六連疾風${hv?'（群體・傷害減半）':'（單體・傷害不減半）'}`);if(hv)groupRes(a,v,undefined,d)}if(count>1)guard0(d)}
+        for(let hit=0;hit<count&&(hit===0||d[a.i]>0&&d[a.o]>0);hit++){let b0=dmg({...a,r:gunRank(a)});const hv=rk&&(rm.cfg.boss&&a.i===1||enemyGroup(a.i));if(hv)b0=Math.ceil(b0/2);const v=isoAdapt?0:envBlackDamage(rm,dm(a.i,b0),a.s),dodgeBefore=valDodged[a.o]||0,dealt=take(d,a.o,v,a.i,lfm,a.s==='S'?'spade':'club',playedBlackRank(a.i)),dodged=(valDodged[a.o]||0)>dodgeBefore;if(dealt>0){hits.push(a.i);effd[a.i]=1;if(rm.chars[a.i]==='rufo'&&a.s==='S')rufoTaskEvents[a.i].S=true}ringHit(a.i,a.o,dealt,a.s==='C');if(v>0&&!dodged)got[a.o]=a.i;if(rm.chars[a.i]==='san'&&!dodged)ls(a,v,d);if(a.s==='S'&&dealt>0)d25Success[a.i]=true;log.push(`${nm(a.i)} 的${SU[a.s]}${count>1?'第'+(hit+1)+'次觸發':''}對 ${nm(a.o)} 造成 ${dodged?0:v} 點傷害${dodged?'（預知眼閃避）':''}`);if(lh)groupRes(a,v,.6,d);if(lk)log.push(`快刀亂麻（${lh?'群體・最終傷害×0.6':'單體・效果翻倍，最終傷害×1.2'}）`);if(rk){log.push(`六連疾風${hv?'（群體・傷害減半）':'（單體・傷害不減半）'}`);if(hv)groupRes(a,v,undefined,d)}if(count>1)guard0(d)}
         if(gun===VALORANT_GUNS.guardian&&a.s==='C'&&cblk[a.i]&&d[a.o]>0){const dealt=take(d,a.o,envBlackDamage(rm,dm(a.i,5),'C'),a.i,undefined,'club',playedBlackRank(a.i));if(dealt>0){effd[a.i]=1;got[a.o]=a.i}log.push(`${nm(a.i)} 的捍衛者斷補成功，追加5點傷害（實際${dealt}）`)}
         if(rk&&tg.s==='D'&&!tg.corrodeDiamond)reflect()
-      }});
+      }const events=combat.slice(growthStart),black=events.filter(e=>e.source===a.i&&['spade','club'].includes(e.attackKind)).reduce((n,e)=>n+e.amount,0),counter=events.filter(e=>e.source===a.o&&e.attackKind==='counter').reduce((n,e)=>n+e.amount,0);if(black>5)xichnLearning.push({route:0,seat:a.i,member:rm.act?.[a.i]??-1});if(counter>5)xichnLearning.push({route:2,seat:a.o,member:rm.act?.[a.o]??-1})});
     d.forEach((v,i)=>hp[i]=v);guard()};
   const sp=ps.filter(p=>p.s==='S');
   [...new Set(sp.map(p=>p.r))].sort((a,b)=>a-b).forEach(r=>group(sp.filter(p=>p.r===r),a=>Math.max(0,a.r-hd(a))));
   group(ps.filter(p=>p.s==='C'),a=>Math.max(0,(boost[a.i]===2||valorantGun(rm.chars[a.i],st[a.i])===VALORANT_GUNS.odin?a.r:Math.ceil(a.r/2))+(ex[a.i]||0)-hd(a)));
-  ps.forEach(p=>{if(!p.corrodeBlack||hp[p.i]<=0)return;const base=p.s==='S'?Math.max(0,p.r-hd(p)):Math.max(0,Math.ceil(p.r/2)-hd(p)),v=envBlackDamage(rm,dm(p.i,base+rvx(p.i,p.i)),p.s),dealt=take(hp,p.i,v,p.i,undefined,p.s==='S'?'spade':undefined);if(dealt>0)got[p.i]=p.i;log.push(`${nm(p.i)} 的侵蝕反噬命中自己，受到 ${v} 點傷害（實際 ${dealt}）`)});
+  ps.forEach(p=>{if(!p.corrodeBlack||hp[p.i]<=0)return;const base=p.s==='S'?Math.max(0,p.r-hd(p)):Math.max(0,Math.ceil(p.r/2)-hd(p)),v=envBlackDamage(rm,dm(p.i,base),p.s),dealt=take(hp,p.i,v,p.i,undefined,p.s==='S'?'spade':undefined);if(dealt>0)got[p.i]=p.i;log.push(`${nm(p.i)} 的侵蝕反噬命中自己，受到 ${v} 點傷害（實際 ${dealt}）`)});
   ps.forEach(p=>{if(p.s!=='H')return;const target=p.healTarget===undefined?p.i:p.healTarget;if(!heal[target])return;
     if(hp[target]<=0){log.push(`${nm(target)} 已倒下，治療無效`);return}
     const count=gunCount(p);for(let hit=0;hit<count&&hp[target]>0;hit++){
-    let v=isA(p)?Math.max(0,hp[p.o]):gunRank(p);const mul=healingFactor(st[target]);if(mul<1)v=Math.ceil(v*mul);const heartShield=rm.chars[target]==='heathcliff'&&st[target].shieldSuit==='H'&&hp[target]>0;if(heartShield)v=Math.ceil(v/2);v=envHeal(rm,v);const b=hp[target];hp[target]=healedHp(b,mx(target),v,rm.chars[target],st[target],log,nm(target));recordHeartHeal(target,hp[target]-b,p.i);if(target===p.i&&rm.chars[p.i]==='rufo'&&hp[target]>b)rufoTaskEvents[p.i].H=true;effd[p.i]=1;if(target===p.i&&rm.chars[p.i]==='san'&&!lock[p.i]){const add=st[p.i].feastBoost?Math.round((hp[target]-b)*1.5):(hp[target]-b);st[p.i].feast+=add}log.push(`${nm(p.i)} 的♥${p.corrodeHeart?'侵蝕治療敵方':'治療'} ${nm(target)} +${hp[target]-b}${healingNote(st[target])}${heartShield?'（希斯克利夫♥盾減半）':''}${isA(p)?'（♥A：對手剩餘血量）':''}${count>1?'（第'+(hit+1)+'次觸發）':''}`)}});
+    let v=isA(p)?Math.max(0,hp[p.o]):gunRank(p);if(target===p.i)v=xichnHeartGain(rm.chars[p.i],st[p.i],v);const mul=healingFactor(st[target]);if(mul<1)v=Math.ceil(v*mul);const heartShield=rm.chars[target]==='heathcliff'&&st[target].shieldSuit==='H'&&hp[target]>0;if(heartShield)v=Math.ceil(v/2);v=envHeal(rm,v);const b=hp[target];hp[target]=healedHp(b,mx(target),v,rm.chars[target],st[target],log,nm(target));recordHeartHeal(target,hp[target]-b,p.i);if(target===p.i&&rm.chars[p.i]==='rufo'&&hp[target]>b)rufoTaskEvents[p.i].H=true;effd[p.i]=1;if(target===p.i&&rm.chars[p.i]==='san'&&!lock[p.i]){const add=st[p.i].feastBoost?Math.round((hp[target]-b)*1.5):(hp[target]-b);st[p.i].feast+=add}log.push(`${nm(p.i)} 的♥${p.corrodeHeart?'侵蝕治療敵方':'治療'} ${nm(target)} +${hp[target]-b}${healingNote(st[target])}${heartShield?'（希斯克利夫♥盾減半）':''}${isA(p)?'（♥A：對手剩餘血量）':''}${count>1?'（第'+(hit+1)+'次觸發）':''}`)}});
   }
   rm.pair.forEach(i=>{if(st[i].crimsonBreathRound===rm.round)st[i].crimsonBreathRound=0});
   if(!envActive(rm,'cheer')&&gs&&gs.guess>=0&&hp[gs.seat]>0){const g=gs.seat,[x,y]=rm.pair,big=P[x].r>P[y].r?x:y;
     if(P[x].r===P[y].r){const before=hp[g];hp[g]=damagedHp(before,mx(g),5,rm.chars[g],st[g],log,nm(g));addDamageFx(damage,rm0,g,recordHpLoss(rm0.chars[g],st[g],before,hp[g]));log.push(`旁觀者 ${nm(g)} 猜了，但雙方點數相同，自損 5 點`)}
     else if(gs.guess===big){
       if(gs.reward==='heal'){const v=envHeal(rm,Math.ceil(healingFactor(st[g]))),before=hp[g];hp[g]=healedHp(hp[g],mx(g),v,rm.chars[g],st[g],log,nm(g));recordHeal(g,hp[g]-before);log.push(`旁觀者 ${nm(g)} 猜中，回復 ${v} 血${healingNote(st[g])}`)}
-      else if(hp[big]>0){const dealt=take(hp,big,dm(g,1+rvx(g,big)),g);if(dealt>0)hits.push(g);if(got[big]===undefined)guessOnly[big]=1;got[big]=g;if(rm.chars[g]==='san')ls({i:g,s:'X'},1,hp);log.push(`旁觀者 ${nm(g)} 猜中，對 ${nm(big)} 造成 1 點傷害`)}
+      else if(hp[big]>0){const dealt=take(hp,big,dm(g,1),g);if(dealt>0)hits.push(g);if(got[big]===undefined)guessOnly[big]=1;got[big]=g;if(rm.chars[g]==='san')ls({i:g,s:'X'},1,hp);log.push(`旁觀者 ${nm(g)} 猜中，對 ${nm(big)} 造成 1 點傷害`)}
       else log.push(`旁觀者 ${nm(g)} 猜中，但目標已倒下`)}
     else log.push(`旁觀者 ${nm(g)} 猜錯，無事發生`)}
   guard();
+  // 立繪2只消耗羅佳自己的下一次出牌；旁觀、後備及立即絕技不扣次數。
+  rm.pair.forEach(i=>{if(rm0.chars[i]==='sad'&&mv[i])st[i].sadArtTurns=0;if(rm0.chars[i]==='lkd'&&mv[i])st[i].lkdArtTurns=0});
+  rm.pair.forEach(i=>{if(rm0.chars[i]==='kira'&&mv[i])st[i].kiraArtTurns=0;if(rm.chars[i]!=='kira'||!cntd[i])return;st[i].kiraCounters=(st[i].kiraCounters||0)+1;if(st[i].kiraCounters>=2){st[i].kiraCounters-=2;st[i].kiraDadUses=(st[i].kiraDadUses||0)+1}st[i].kiraArtTurns=1;soundCues.push({seat:i,file:kiraSoundFile(2),replaceAttack:true});log.push(`${nm(i)} 的綺羅反擊成功，老爸技資格${st[i].kiraDadUses}次（反擊累積${st[i].kiraCounters}/2）`)});
+  rm.pair.forEach(i=>{if(rm.chars[i]!=='lkd'||!cntd[i])return;st[i].lkdCounters=(st[i].lkdCounters||0)+1;if(st[i].lkdCounters>=2){st[i].lkdCounters-=2;st[i].lkdHaircuts=(st[i].lkdHaircuts||0)+1}st[i].lkdArtTurns=1;soundCues.push({seat:i,file:lkdSoundFile(2),replaceAttack:true});log.push(`${nm(i)} 反擊成功，理髮卷資格${st[i].lkdHaircuts}次（反擊累積${st[i].lkdCounters}/2）`)});
   rm.pair.forEach(i=>{if(rm.chars[i]!=='sad'||!mv[i])return;const s0=st[i];s0.sadNext=0;s0.noD=0;s0.dDefFail=0;
-    if(mv[i][0]!=='D')return;s0.sadCounters=(s0.sadCounters||0)+1;s0.sadTears=Math.min(3,(s0.sadTears||0)+1);log.push(`${nm(i)} 打出方塊，獲得1層淚鋒（${s0.sadTears}/3；本局已出${s0.sadCounters}張方塊）`);
-    if(s0.sadTears===3&&!s0.sadPride){s0.sadTears=0;s0.sadNext=1;log.push(`${nm(i)} 消耗全部淚鋒，恢復虛弱1、移除淚鋒強壯；下一張牌點數+5，命中使敵方理智-20或追加3點固定傷害`)}
+    if(P[i]?.sadEmpowered)soundCues.push({seat:i,file:sadSoundFile(3)});
+    if(mv[i][0]!=='D')return;const before=s0.sadTears||0;s0.sadCounters=(s0.sadCounters||0)+1;s0.sadTears=Math.min(3,before+1);log.push(`${nm(i)} 打出方塊，獲得1層淚鋒（${s0.sadTears}/3；本局已出${s0.sadCounters}張方塊）`);
+    if(s0.sadTears>before){s0.sadArtTurns=1;soundCues.push({seat:i,file:sadSoundFile(2)})}
+    if(s0.sadTears===3&&!s0.sadPride){s0.sadTears=0;s0.sadNext=1;log.push(`${nm(i)} 消耗全部淚鋒，恢復虛弱1、移除淚鋒強壯；下一張牌點數+6，命中使敵方理智-20或追加3點固定傷害`)}
   });
   rm.pair.forEach(i=>{const card=mv[i];if(rm.chars[i]!=='moses'||!card)return;const color='SC'.includes(card[0])?'red':card[0]==='D'?'purple':card[0]==='H'?'white':null;if(color)addMosesSmoke(st[i],color,+submittedMv[i].slice(1),log,nm(i),'基本點數'+submittedMv[i].slice(1))});
   if(!extra?.noD25)rm.pair.forEach(i=>{if(hp[i]<=0||!mv[i])return;const d=d25List[i];if(d.bust||d.ready||d.used)return;const gain=mv[i][0]==='H'?(d25HeartGain[i]||0):d25Success[i]?+mv[i].slice(1):0;if(gain>0){d.val=tidyHp(d.val+gain);if(d.val===25){if(!d25Claimed){d25Candidates.push(i);log.push(`🌟【二十五之刻】${nm(i)} 累積 +${gain} 點，剛好集滿25點！`)}else log.push(`⏳【二十五之刻】${nm(i)} 累積 +${gain} 點（達到25點，但全場已有一位達成完美決鬥）`)}else if(d.val>25){d.bust=true;log.push(`💥【二十五之刻】${nm(i)} 累積 +${gain} 點，達到 ${d.val} 點（超過25點），爆牌崩壞！`)}else log.push(`⏳【二十五之刻】${nm(i)} 累積 +${gain} 點（目前 ${d.val} / 25 點）`)}});
@@ -2356,7 +2545,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
   });
   rm.pair.forEach(i=>{if(rm.chars[i]!=='heathcliff'||hp[i]<=0||!st[i].shieldSuit)return;const o=rm.pair.find(j=>j!==i);if(o===undefined||P[o]?.s===st[i].shieldSuit)return;st[i].coffin=(st[i].coffin||0)+1;let gained=0;while(st[i].coffin>=7){st[i].coffin-=7;st[i].will=(st[i].will||0)+1;gained++}log.push(`${nm(i)} 的對手沒有打出${SU[st[i].shieldSuit]}牌，獲得1層棺（${st[i].coffin}/7）`);if(gained)log.push(`${nm(i)} 的棺集滿7層，獲得${gained}層毅力（共${st[i].will}）`)});
   rm.seats.forEach((_,i)=>{const c=rm.chars[i];
-    if(c==='mat'){const g=got[i];if(g!==undefined&&g!==i){st[i].rv[g]=Math.min(2,(st[i].rv[g]||0)+1);log.push(`${nm(g)} 成為 ${nm(i)} 的復仇對象（×${st[i].rv[g]}）`)}
+    if(c==='mat'){
       if(wrapUp[i]){st[i].wrap++;log.push(`${nm(i)} 獲得拆開的包裝紙（×${st[i].wrap}）`)}}
     if(c==='rien'&&P[i]&&!P[i].none&&rm.st[i].cmd&&hp[i]>0){
       if(mv[i]===rm.st[i].cmd){const p=P[i];let ok=false;
@@ -2382,7 +2571,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     if(px&&py&&!px.none&&!py.none)[[px,py],[py,px]].forEach(([a,b])=>{if(a.winClash)return;if(a.r>b.r)addSan(a.i,5);else if(a.r<b.r)addSan(a.i,-5)});
     ps.forEach(p=>{if(cntd[p.i])addSan(p.i,10);if(refl[p.i])addSan(p.i,-10)})}
   rm.seats.forEach((_,i)=>{if(hp[i]<=0&&got[i]!==undefined&&got[i]!==i)addSan(got[i],15)});
-  rm.seats.forEach((_,i)=>{const b=st[i].burn||0;if(b>0&&hp[i]>0){const dl=take(hp,i,b);log.push(`${nm(i)} 受到炎傷 ${b} 點傷害`+(dl<b?`（實際 ${dl}）`:''));st[i].burn=b-1}});if(tcl)tcl.forEach((t,es)=>t.forEach((m,k)=>{if(k===rm.act[es]||m.dead)return;const b=m.st.burn||0;if(b>0){const dl=hitRes(es,k,b,undefined,'炎傷');log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 受到炎傷 ${b} 點傷害`+(dl<b?`（實際 ${dl}）`:''));m.st.burn=b-1}}));guard();
+  rm.seats.forEach((_,i)=>{const b=st[i].burn||0;if(b>0&&hp[i]>0){const dl=takeOne(hp,i,b,undefined,undefined,'burn');log.push(`${nm(i)} 受到炎傷 ${b} 點傷害`+(dl<b?`（實際 ${dl}）`:''));matBurnRelay(st[i],b,dl);st[i].burn=b-1}});if(tcl)tcl.forEach((t,es)=>t.forEach((m,k)=>{if(k===rm.act[es]||m.dead)return;const b=m.st.burn||0;if(b>0){const dl=hitRes(es,k,b,undefined,'炎傷');log.push(`${nm(es)} 的後備 ${CHARS[m.c].n} 受到炎傷 ${b} 點傷害`+(dl<b?`（實際 ${dl}）`:''));matBurnRelay(m.st,b,dl);m.st.burn=b-1}}));guard();
   rm.pair.forEach(i=>{if(rm.chars[i]==='verg')tickVerg(st[i],i)});if(tcl)tcl.forEach((t,es)=>t.forEach((m,k)=>{if(k!==rm.act[es]&&m.c==='verg'&&!m.dead)tickVerg(m.st,es)}));
   rm.pair.forEach(i=>{if(rm.chars[i]!=='card_ish'||!st[i].ishSlashPending)return;st[i].ishSlashPending=false;const target=rm.pair.find(j=>j!==i&&hp[j]>0);if(target===undefined){log.push(`${nm(i)} 的【光斬】沒有存活的敵方目標`);return}
     for(let hit=1;hit<=5;hit++){if(hp[target]<=0)break;const v=dm(i,4),dealt=take(hp,target,v,i);if(dealt>0)hits.push(i);if(v>0)got[target]=i;log.push(`${nm(i)} 的【光斬】第${hit}擊 → ${nm(target)}：${v}點單方面傷害（實際${dealt}）`);guard()}
@@ -2441,6 +2630,7 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
     if(submittedMv[i]===U.card&&(U.sunId?extra?.sunUsed?.[i]===U.sunId:!extra?.sunUsed?.[i]&&extra?.visibility?.[i]!==false)){delete rm.env.ultimatums[i];log.push(`📜 ${nm(i)} 打出${cs(U.card)}，完成最後通牒`);cueEnvironment('ultimatum','fulfilled',[i],`${nm(i)}・通牒解除`)}
     else if(--U.left<=0){delete rm.env.ultimatums[i];const lost=environmentLoseLife(rm0,i,4,log,damage,hp,st);if(lost)damage[damage.length-1].environment='ultimatum';log.push(`📜【最後通牒】${nm(i)} 未在兩次出戰內打出${cs(U.card)}，失去${lost}點生命`);guard();cueEnvironment('ultimatum','impact',[i],`${nm(i)}・未完成通牒，生命−${lost}`)}
   });
+  soberDrunk({...rm0,hp,st,team:tcl,chars:rm.chars},damage,combat,log);finishDrunkTurn({...rm0,hp,st,team:tcl,chars:rm.chars},submittedMv,sk,d25HeartGain,log,soundCues);
   flushEnvironmentConversions({...rm,hp,st,team:tcl});
   st.forEach(s=>s.fx=(s.fx||[]).filter(f=>f.source!=='environment'));if(tcl)tcl.forEach(t=>t.forEach(m=>m.st.fx=(m.st.fx||[]).filter(f=>f.source!=='environment')));
   const sunUsed=extra&&extra.sunUsed||{},hands={...rm.hands},up={...rm.up},oc={...rm.oc},pend=[];let deck=[...rm.deck];
@@ -2467,21 +2657,26 @@ const fxStart=damage.length,n=nut[t];if(n&&n.hp>0){addDamageFx(damage,rm0,t,n.hp
   if(rm.env?.publicSun)Object.keys(rm.env.publicSun).forEach(i=>rm.env.publicSun[i]=rm.env.publicSun[i].filter(c=>(hostSunCards[i]||[]).some(x=>x.id===c.id)));
   if(redrawDo!==undefined){const i=redrawDo,n=hands[i].length,others=Object.keys(hands).filter(k=>+k!==i).flatMap(k=>hands[k]);deck=newDeck(others);hands[i]=deck.splice(0,n);up[i]=hands[i].slice(0,Math.min(n,oc[i]))}
   enforceFirefuHands({...rm,st,hp,hands,up,oc});
-  const rdwN=rm.seats.map((_,k)=>(+(rm.rdw&&rm.rdw[k])||0)+(k===redrawDo?1:0));
+  const rdwN=rm.seats.map((_,k)=>(+(rm.rdw&&rm.rdw[k])||0)+(k===redrawDo&&!redrawFree?1:0));
   // 完成侵蝕回合後歸零；先於換人同步，讓下回合與接替角色都從0理智開始。
   ps.forEach(p=>{if(p.corrosion){st[p.i].san=0;log.push(`${nm(p.i)} 的侵蝕回合結束，下回合理智重置為0`)}});
   if(ps.length===2&&ps.every(p=>!p.none&&!p.v&&'SC'.includes(p.s)))ps.forEach(p=>{if(rm.chars[p.i]==='iso'&&hp[p.i]>0&&st[p.i].isoDualRefresh){st[p.i].isoDual=1;st[p.i].isoDualRefresh=0;log.push(`${nm(p.i)} 的【雙源】於雙方互攻後刷新，本次技能的刷新已使用`)}});
   st.forEach(s=>{s.isoCut=0;s.isoAdapt=0});if(tcl)tcl.forEach(t=>t.forEach(m=>{m.st.isoCut=0;m.st.isoAdapt=0}));
+  Object.keys(cblk).forEach(i=>{if(cblk[i])xichnLearning.push({route:3,seat:+i,member:rm.act?.[i]??-1})});
   recordValorantIncome(rm,valorantEconomy,P,cblk,cntd,refl,effd,log);
-  const {team:nteam,act:nact,swapsLeft:nsw,chars:nchars}=settleCharacters(rm0,{hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,swaps});
+  const {team:nteam,act:nact,swapsLeft:nsw,chars:nchars}=settleResolved({hp,st,cp,team:tcl,rres,nut,spk,autoZilu,log,passChars:rm.chars,swaps});
+  for(let q=pend.length-1;q>=0;q--)if(hp[pend[q]]<=0)pend.splice(q,1);
+  waitXichn({...rm,hp,st,team:nteam,act:nact,chars:nchars},rm.pair,rm.round,log,xichnBlocked);
+  normalizeFingerRevenge({...rm,hp,st,team:nteam,act:nact,chars:nchars});
   d25JustTriggered=claimD25({...rm,hp,chars:nchars},d25List,d25Candidates);
   if(d25JustTriggered){d25Claimed=true;log.push(d25JustTriggered.draw?`🎡【完美決鬥爭奪】${d25JustTriggered.draw.candidates.map(p=>p.name).join('、')} 同回合集滿25點，先公告5秒、點擊爭奪5秒，再轉加權輪盤。`:`🌟【完美決鬥】${d25JustTriggered.name} 取得本局絕技資格！`)}
   const al=hp.filter(h=>h>0).length;
   let nx={...rm,...(valorantEconomy?{valorantEconomy}:{}),cp,sLog:null,rdw:rdwN,team:nteam,act:nact,swapsLeft:nsw,chars:nchars,hp,st,hands,up,oc,deck,pend,round:rm.round+1,d25:d25List,d25Claimed,d25Banner:d25JustTriggered||(rm.d25Banner&&rm.d25Banner.round===rm.round+1?rm.d25Banner:null),
-    last:{round:rm.round,pair:[...rm.pair],chars:[...rm0.chars],weapons:valorantWeaponSnapshot(rm0).map((g,i)=>Object.hasOwn(attackWeapons,i)?attackWeapons[i]:g),firefuSounds:firefuSoundSnapshot(rm0),plays:rm.pair.filter(i=>mv[i]||bombPass[i]).map(i=>({i,card:bombPass[i]?'B0':mv[i],...(mv[i]!==submittedMv[i]?{originalCard:submittedMv[i]}:{}),eff:bombPass[i]?!!bombPassed[i]:!!effd[i],...(sunUsed[i]?{sunId:sunUsed[i]}:{})})),...(Object.keys(valDodgeSun).length?{consumedSun:Object.values(valDodgeSun).flat()}:{}),hits:[...new Set(hits)],damage,combat,healing,log:log.length?log:['本回合沒有造成影響']}};
+    last:{round:rm.round,pair:[...rm.pair],chars:[...rm0.chars],weapons:valorantWeaponSnapshot(rm0).map((g,i)=>Object.hasOwn(attackWeapons,i)?attackWeapons[i]:g),firefuSounds:firefuSoundSnapshot(rm0),soundCues,plays:rm.pair.filter(i=>mv[i]||bombPass[i]).map(i=>({i,card:bombPass[i]?'B0':mv[i],...(mv[i]!==submittedMv[i]?{originalCard:submittedMv[i]}:{}),eff:bombPass[i]?!!bombPassed[i]:!!effd[i],...(sunUsed[i]?{sunId:sunUsed[i]}:{})})),...(Object.keys(valDodgeSun).length?{consumedSun:Object.values(valDodgeSun).flat()}:{}),hits:[...new Set(hits)],damage,combat,healing,log:log.length?log:['本回合沒有造成影響']}};
   if(rm.cfg.boss&&(hp[1]<=0||hp[0]<=0&&hp[2]<=0))return{...nx,status:'over',winner:hp[1]<=0?0:1};
   if(al<=1)return{...nx,status:'over',winner:al?hp.findIndex(h=>h>0):-1};
-  if(pend.length)return{...nx,phase:'reveal',deadline:rm.cfg.time?Date.now()+rm.cfg.time*1000:0};
+  nx=syncDrunkHands(nx);
+  if(nx.pend.length)return{...nx,phase:'reveal',deadline:rm.cfg.time?Date.now()+rm.cfg.time*1000:0};
   return extra?.deferAdvance?nx:advance(nx)}
 
 /* ---------- 連線 ---------- */
@@ -2494,14 +2689,14 @@ function nextActor(){if(room&&room.status==='pick'){const order=room.selection.o
   if(mirrorPending())return room.mirrorChoice.seat;
   if(environmentTradePending()){const T=room.env.trade;return T.seats.find(i=>T.choices[i]===undefined)??testSeat}
   if(room.phase==='answer'&&room.question)return room.question.target;
-  if(room.phase==='play'){if(envActive(room,'cheer')&&room.cfg.n===3&&!room.cfg.boss){const sp=room.seats.findIndex((_,i)=>room.hp[i]>0&&!room.pair.includes(i));if(sp>=0&&!moves['g'+room.round+'_'+sp]&&room.env.support?.round!==room.round)return sp}for(const i of room.pair)if(room.hp[i]>0&&!moves[room.round+'_'+i]&&(envSilent(room)||!(room.st[i].stun>0)))return i;
+  if(room.phase==='play'){if(envActive(room,'cheer')&&room.cfg.n===3&&!room.cfg.boss){const sp=room.seats.findIndex((_,i)=>room.hp[i]>0&&!room.pair.includes(i));if(sp>=0&&!moves['g'+room.round+'_'+sp]&&room.env.support?.round!==room.round)return sp}for(const i of room.pair)if(room.hp[i]>0&&!kiraCardLocked(room,i)&&!moves[room.round+'_'+i]&&(envSilent(room)||!(room.st[i].stun>0)))return i;
     if(room.cfg.n===3&&!room.cfg.boss){const sp=room.seats.findIndex((_,i)=>room.hp[i]>0&&!room.pair.includes(i));if(sp>=0&&!moves['g'+room.round+'_'+sp])return sp}}
   else for(const i of room.pend)if(!moves['v'+room.round+'_'+i])return i;
   return testSeat}
 const rd=()=>test?(testSeat=nextActor()):room?room.seats.findIndex(s=>s.id===uid):-1;
 const sortedJoins=()=>[...joins].sort((a,b)=>a.t-b.t||(a.id<b.id?-1:1));
 // 五秒死線由房主保存；每位出戰玩家獨立計時，回合、角色或可出牌階段改變才重開。
-function timeCanPlay(r,i){return !!(r&&r.status==='playing'&&r.phase==='play'&&r.timeTargets?.includes(i)&&r.pair.includes(i)&&r.hp[i]>0&&!envSilent(r)&&!mirrorPending(r)&&!environmentTradePending(r)&&!d25DrawPending(r)&&!(r.st[i].stun>0)&&!(CHARS[r.chars[i]]?.f==='bus'&&r.st[i].san<=-45))}
+function timeCanPlay(r,i){return !!(r&&r.status==='playing'&&r.phase==='play'&&!kiraCardLocked(r,i)&&r.timeTargets?.includes(i)&&r.pair.includes(i)&&r.hp[i]>0&&!envSilent(r)&&!mirrorPending(r)&&!environmentTradePending(r)&&!d25DrawPending(r)&&!(r.st[i].stun>0)&&!(CHARS[r.chars[i]]?.f==='bus'&&r.st[i].san<=-45))}
 function refreshTimeClocks(r,now=Date.now()){
   if(!r?.timeTargets?.length){if(r?.timeClocks)r.timeClocks={};return r}const next={};
   r.timeTargets.forEach(i=>{if(!timeCanPlay(r,i))return;const key=`${r.roundBase||1}:${r.round}:${r.act?.[i]??-1}:${r.chars[i]}`,old=r.timeClocks?.[i];next[i]=old?.key===key?{...old}:{key,startedAt:now,endsAt:now+5000}});r.timeClocks=next;return r;
@@ -2539,7 +2734,7 @@ function expireTimeClocks(){
 function timeClockText(i){if(!room||room.hp[i]<=0||room.status!=='playing')return'';if(!room.pair.includes(i))return'⌛ 出戰時限5秒';if(!timeCanPlay(room,i))return'⌛ 5秒死線・暫停';if(timeMoveDone(room,i))return'⌛ 已出牌・倒數停止';const C=room.timeClocks?.[i];return`⌛ 出牌剩餘 ${C?(Math.max(0,C.endsAt-d25Now())/1000).toFixed(1):'5.0'} 秒・逾時死亡`}
 function timeClockUI(i){return room.timeTargets?.includes(i)&&room.hp[i]>0&&room.status==='playing'?`<div class="time-death-clock" data-time-clock="${i}" role="timer">${timeClockText(i)}</div>`:''}
 function syncTimeClockUI(){document.querySelectorAll('[data-time-clock]').forEach(el=>el.textContent=timeClockText(+el.dataset.timeClock))}
-const save=r=>db.doc('rooms/'+code).set(refreshTimeClocks(syncTktHealth(r))).catch(()=>{busy=''});
+const save=r=>db.doc('rooms/'+code).set(syncDrunkSight(refreshTimeClocks(syncTktHealth(r)))).catch(()=>{busy=''});
 // 回合中技能退回已提交的牌；暫時手牌只清除提交紀錄，仍留在原玩家手中。
 function returnBattleMoves(r,seat,log,originalPair=r.pair){const changed=originalPair.some((i,k)=>i!==r.pair[k]),writes=[];let returned=false;
   new Set([...originalPair,...r.pair]).forEach(i=>{const key=r.round+'_'+i;
@@ -2548,7 +2743,7 @@ function returnBattleMoves(r,seat,log,originalPair=r.pair){const changed=origina
   });if(returned&&r.cfg.time)r.deadline=Date.now()+r.cfg.time*1000;return writes;
 }
 function sendPrivateTo(userId,msg){const cn=conns.find(x=>x.uid===userId);if(cn)try{cn.send({privateData:msg})}catch(e){}}
-function handlePrivateData(m){if(!m)return;if(m.sunCard){if(!privateSunCards.some(x=>x.id===m.sunCard.id))privateSunCards.push(m.sunCard);sunPending=false;render()}if(m.sunCardUpdate){privateSunCards=privateSunCards.map(c=>c.id===m.sunCardUpdate.id?{...m.sunCardUpdate}:c);render()}if(m.sunError){sunPending=false;if(m.dropSun)privateSunCards=privateSunCards.filter(x=>x.id!==m.dropSun);render()}}
+function handlePrivateData(m){if(!m)return;if(m.drunkSight){privateDrunkSight=m.drunkSight;render()}if(m.sunCard){if(!privateSunCards.some(x=>x.id===m.sunCard.id))privateSunCards.push(m.sunCard);sunPending=false;render()}if(m.sunCardUpdate){privateSunCards=privateSunCards.map(c=>c.id===m.sunCardUpdate.id?{...m.sunCardUpdate}:c);render()}if(m.sunError){sunPending=false;if(m.dropSun)privateSunCards=privateSunCards.filter(x=>x.id!==m.dropSun);render()}}
 function handlePrivateRequest(cn,req){if(req?.type==='environmentSupport'){acceptEnvironmentSupport(cn,req);return}if(req?.type==='isoTarget'){acceptIsoTarget(cn,req);return}if(req?.type==='isoCard'){acceptIsoCard(cn,req);return}if(isoPending())return;if(req?.type==='isoSkill'){acceptIsoSkill(cn,req);return}if(req?.type==='valorantShop'){acceptValorantShop(cn,req);return}if(valorantShopPending())return;if(req?.type==='mosesBreath'){acceptMosesBreath(cn,req);return}if(req?.type==='mirrorChoice'){acceptMirrorChoice(cn,req);return}if(isoPending()||valorantShopPending()||mirrorPending())return;if(req?.type==='environmentTrade'){acceptEnvironmentTrade(cn,req);return}if(environmentTradePending())return;if(req?.type==='d25Click'){acceptD25Click(cn,req);return}if(!room||!req||!room.seats||envSilent(room)&&req.type==='sun')return;const seat=test?req.seat:room.seats.findIndex(x=>x.id===req.uid);if(seat<0||seat!==req.seat||(cn&&cn.uid&&cn.uid!==req.uid))return;if(cn)cn.uid=req.uid;
   if(req.type==='sun'&&req.round===room.round&&'SCHD'.includes(req.suit)&&room.pair.includes(seat)){
     const p=`rooms/${code}/moves/u${req.round}_${seat}_${req.requestId}`;hostSunRequests[req.requestId]=req.suit;db.doc(p).set({owner:seat,requestId:req.requestId});return}
@@ -2608,21 +2803,21 @@ function tick(){ // 房主負責結算、輪盤與逾時
   const key=room.phase+room.round;if(busy===key)return;
   const late=room.deadline&&Date.now()>room.deadline;
   if(room.phase==='play'){const mv={};
-    const d25Seat=envSilent(room)?-1:room.seats.findIndex((_,i)=>{const m=moves['u25_'+room.round+'_'+i],d=room.d25&&room.d25[i];return m&&m.skill&&d&&d.ready&&!d.used&&!(room.st[i].stun>0)&&room.hp[i]>0});
+    const d25Seat=envSilent(room)?-1:room.seats.findIndex((_,i)=>{const m=moves['u25_'+room.round+'_'+i],d=room.d25&&room.d25[i];return m&&m.skill&&d25SkillAvailable(room,i,m.skill)&&d&&d.ready&&!d.used&&!(room.st[i].stun>0)&&room.hp[i]>0});
     if(d25Seat>=0){const k2='u25_'+room.round+'_'+d25Seat;if(busy===k2)return;busy=k2;useD25(d25Seat,moves[k2].skill);return}
-    const sq=envSilent(room)?undefined:room.pair.find(i=>{const m=moves['s'+room.round+'_'+i],C=CHARS[room.chars[i]];return m&&m.s&&C&&C.ss&&room.st[i].sRound!==room.round&&cpOf(i)>=C.ss.cost&&!(room.st[i].sealT>0)&&!(room.st[i].stun>0)&&(!C.ss.can||C.ss.can(room,i))});
+    const sq=envSilent(room)?undefined:room.pair.find(i=>{const m=moves['s'+room.round+'_'+i],C=CHARS[room.chars[i]];return m&&m.s&&C&&C.ss&&(C.ss.repeat||room.st[i].sRound!==room.round)&&cpOf(i)>=C.ss.cost&&!(room.st[i].sealT>0)&&!(room.st[i].stun>0)&&(!C.ss.can||C.ss.can(room,i))});
     if(sq!==undefined){const k2='s'+room.round+'_'+sq;if(busy===k2)return;busy=k2;useS(sq);return}
     const rp=envSilent(room)?undefined:room.pair.find(i=>{const m=moves[room.round+'_'+i];return m&&m.rep&&room.chars[i]==='rien'&&(room.st[i].grace||0)>=9&&!room.st[i].repUsed&&!(room.st[i].sealT>0)});
     if(rp!==undefined){busy=key;mv[rp]=null;save(resolve(room,mv,null,{[rp]:true},swapsOf()));return}
-    const rq=room.pair.find(i=>{const m=moves[room.round+'_'+i];return m&&m.redraw});
+    const rq=room.pair.find(i=>{const m=moves[room.round+'_'+i];return !kiraCardLocked(room,i)&&m&&m.redraw});
     if(rq!==undefined){busy=key;save(resolve(room,{},null,{},swapsOf(),{redraw:rq}));return}
-    const sk={},sunUsed={},bombPass={};for(const i of room.pair){if(!envSilent(room)&&room.st[i].stun>0)continue;const m=moves[room.round+'_'+i];if(m){if(m.bomb){if(!bombMoveValid(room,i,m)){db.doc(`rooms/${code}/moves/${room.round}_${i}`).set(null);return}bombPass[i]=m.bomb;mv[i]=null;sk[i]=false}else if(m.hidden){const sm=hostPrivateMoves[room.round+'_'+i],sc=sm&&(hostSunCards[i]||[]).find(x=>x.id===sm.id);if(!sm||!sc||sc.card!==sm.card){delete hostPrivateMoves[room.round+'_'+i];db.doc(`rooms/${code}/moves/${room.round}_${i}`).set(null);if(!test&&room.seats[i].id!==uid)sendPrivateTo(room.seats[i].id,{sunError:true,dropSun:sm&&sm.id});else{sunPending=false;if(sm)privateSunCards=privateSunCards.filter(x=>x.id!==sm.id)}return}mv[i]=sc.card;sunUsed[i]=sc.id;sk[i]=(sm.lei!==undefined&&sm.lei!==null)?{lei:sm.lei}:(sm.art||!!sm.skill)}else{mv[i]=m.card;sk[i]=(m.lei!==undefined&&m.lei!==null)?{lei:m.lei}:(m.art||!!m.skill)}}else if(late&&!timeCanPlay(room,i)){const validHand=diamondBanned(room,i)?room.hands[i].filter(c=>c[0]!=='D'):room.hands[i];mv[i]=rnd(validHand.length?validHand:room.hands[i]);}else return}
+    const sk={},sunUsed={},bombPass={};for(const i of room.pair){if(kiraCardLocked(room,i)||!envSilent(room)&&room.st[i].stun>0)continue;const m=moves[room.round+'_'+i];if(m){if(m.bomb){if(!bombMoveValid(room,i,m)){db.doc(`rooms/${code}/moves/${room.round}_${i}`).set(null);return}bombPass[i]=m.bomb;mv[i]=null;sk[i]=false}else if(m.hidden){const sm=hostPrivateMoves[room.round+'_'+i],sc=sm&&(hostSunCards[i]||[]).find(x=>x.id===sm.id);if(!sm||!sc||sc.card!==sm.card){delete hostPrivateMoves[room.round+'_'+i];db.doc(`rooms/${code}/moves/${room.round}_${i}`).set(null);if(!test&&room.seats[i].id!==uid)sendPrivateTo(room.seats[i].id,{sunError:true,dropSun:sm&&sm.id});else{sunPending=false;if(sm)privateSunCards=privateSunCards.filter(x=>x.id!==sm.id)}return}mv[i]=sc.card;sunUsed[i]=sc.id;sk[i]=(sm.lei!==undefined&&sm.lei!==null)?{lei:sm.lei}:(sm.art||!!sm.skill)}else{mv[i]=m.card;sk[i]=(m.lei!==undefined&&m.lei!==null)?{lei:m.lei}:(m.art||!!m.skill)}}else if(late&&!timeCanPlay(room,i)){const validHand=diamondBanned(room,i)?room.hands[i].filter(c=>c[0]!=='D'):room.hands[i];mv[i]=rnd(validHand.length?validHand:room.hands[i]);}else return}
     let gs=null;if(room.cfg.n===3&&!room.cfg.boss){const sp=room.seats.findIndex((_,i)=>room.hp[i]>0&&!room.pair.includes(i)),m=moves['g'+room.round+'_'+sp];
       if(sp>=0){if(m)gs={seat:sp,...m};else if(!late)return;else if(envActive(room,'cheer'))gs={seat:sp,support:rnd(room.pair)}}}
     busy=key;save(resolve(room,mv,gs,sk,swapsOf(),{sunUsed,bombPass,visibility:Object.fromEntries(room.pair.map(i=>[i,moves[room.round+'_'+i]?.visible]))}))}
   else{const up={...room.up};
     for(const i of room.pend){const m=moves['v'+room.round+'_'+i],hid=subtractCards(room.hands[i],up[i]),need=hid.length-Math.max(0,room.oc[i]-up[i].length);
-      let hide=null;if(m&&Array.isArray(m.hide)&&m.hide.length===need&&containsCards(hid,m.hide))hide=m.hide;
+      let hide=null;if(drunkActive(room,i)&&room.st[i].drunkSip>=4)hide=hid.slice().sort(()=>Math.random()-.5).slice(0,need);if(!hide&&m&&Array.isArray(m.hide)&&m.hide.length===need&&containsCards(hid,m.hide))hide=m.hide;
       if(!hide){if(late)hide=hid.slice().sort(()=>Math.random()-.5).slice(0,need);else return}
       up[i]=[...up[i],...subtractCards(hid,hide)]}
     busy=key;save(advance({...room,up,pend:[]}))}}
@@ -2685,7 +2880,7 @@ const pick=(c,visible=null)=>{if(isoPending()||valorantShopPending()||mirrorPend
 function pickSunCard(id){if(isoPending()||valorantShopPending()||mirrorPending())return;const sc=privateSunCards.find(x=>x.id===id);if(sc){sel=sc.card;sunCardSel=id;render()}}
 function activateTorch(){if(isoPending()||valorantShopPending()||mirrorPending()||envSilent(room)||environmentTradePending())return;const s=rd();db.doc(`rooms/${code}/moves/t${room.round}_${s}`).set({owner:s})}
 function activateSun(){if(isoPending()||valorantShopPending()||mirrorPending()||envSilent(room)||environmentTradePending())return;const s=rd(),requestId='sunreq-'+room.round+'-'+s+'-'+Date.now()+'-'+Math.random().toString(36).slice(2,6),req={type:'sun',uid,seat:s,round:room.round,suit:sunSuitPick,requestId};sunPending=true;render();setTimeout(()=>{if(sunPending){sunPending=false;render()}},6000);if(test||isHost)handlePrivateRequest(null,req);else if(hostConn)hostConn.send({privateRequest:req})}
-function play(){if(battleObservationActive())return;if(isoPending()||valorantShopPending()||mirrorPending()||environmentTradePending())return;const s=rd();if(moves[room.round+'_'+s]||!sel)return;if(sel&&sel[0]==='D'&&diamondBanned(room,s)){alert('受到連續防守懲罰：本回合無法出方塊牌！');return;}const base={visible:selUp,skill:!envSilent(room)&&!!skOn&&!!skillLabel(s),art:envSilent(room)?null:artPick||null,lei:!envSilent(room)&&room.chars[s]==='lei'?leiVal(s):null};if(sunCardSel){const c=privateSunCards.find(x=>x.id===sunCardSel);if(!c)return;const req={type:'playSun',uid,seat:s,round:room.round,id:c.id,card:c.card,...base};if(test||isHost){hostPrivateMoves[room.round+'_'+s]=req;db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({hidden:true})}else if(hostConn){hostConn.send({privateRequest:req})}}else db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({card:sel,...base});sel=null;sunCardSel=null;skOn=false;artPick='';leiPick=0;}
+function play(){if(battleObservationActive())return;if(isoPending()||valorantShopPending()||mirrorPending()||environmentTradePending())return;const s=rd();if(kiraCardLocked(room,s)||moves[room.round+'_'+s]||!sel)return;if(sel&&sel[0]==='D'&&diamondBanned(room,s)){alert('受到連續防守懲罰：本回合無法出方塊牌！');return;}const base={visible:selUp,skill:!envSilent(room)&&!!skOn&&!!skillLabel(s),art:envSilent(room)?null:artPick||null,lei:!envSilent(room)&&room.chars[s]==='lei'?leiVal(s):null};if(sunCardSel){const c=privateSunCards.find(x=>x.id===sunCardSel);if(!c)return;const req={type:'playSun',uid,seat:s,round:room.round,id:c.id,card:c.card,...base};if(test||isHost){hostPrivateMoves[room.round+'_'+s]=req;db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({hidden:true})}else if(hostConn){hostConn.send({privateRequest:req})}}else db.doc(`rooms/${code}/moves/${room.round}_${s}`).set({card:sel,...base});sel=null;sunCardSel=null;skOn=false;artPick='';leiPick=0;}
 function reveal(c){if(isoPending()||valorantShopPending()||mirrorPending())return;db.doc(`rooms/${code}/moves/v${room.round}_${rd()}`).set({card:c})}
 function guess(g){if(envActive(room,'cheer')||environmentTradePending()||d25DrawPending())return;if(isoPending()||valorantShopPending()||mirrorPending())return;const e=document.getElementById('rw');db.doc(`rooms/${code}/moves/g${room.round}_${rd()}`).set({guess:g,reward:e?e.value:'heal'})}
 function supportPlayer(target){const seat=rd(),req={type:'environmentSupport',uid,seat,round:room.round,target};if(test||isHost)acceptEnvironmentSupport(null,req);else if(hostConn)hostConn.send({privateRequest:req})}
@@ -2703,10 +2898,14 @@ function specView(s){const gm=moves['g'+room.round+'_'+s]||(room.env?.support?.r
   <div class="row"><label>猜中獎勵 <select id="rw"><option value="heal">我回復 1 血</option><option value="dmg">對較大者 1 點傷害</option></select></label></div>
   <div class="row">${room.pair.map(i=>`<button onclick="guess(${i})">猜 ${nm[i]} 較大</button>`).join('')}<button onclick="guess(-1)">不猜</button></div></div>`}
 function applyD25Effect(r,i,skillId,forced=false){
+  armXichn(r);
+  if(!d25SkillAvailable(r,i,skillId))return {log:['隊伍需有存活馬蒂亞斯才可發動此技能。'],hits:[],damage:[],combat:[],healing:[],soundCues:[]};
   const d=r.d25[i];
   const o=r.pair.find(x=>x!==i&&environmentEnemies(r,i).includes(x)&&r.hp[x]>0)??environmentEnemies(r,i).find(x=>r.hp[x]>0),nm=n=>r.seats[n].name;
-  const c=r.chars&&r.chars[i],originalChars=[...(r.chars||[])],originalWeapons=valorantWeaponSnapshot(r),originalFirefuSounds=firefuSoundSnapshot(r),attackHits=[],attackDamage=[],attackCombat=[],attackHealing=[];
+  const c=r.chars&&r.chars[i],originalChars=[...(r.chars||[])],originalWeapons=valorantWeaponSnapshot(r),originalFirefuSounds=firefuSoundSnapshot(r),attackHits=[],attackDamage=[],attackCombat=[],attackHealing=[],soundCues=[];
   if(c==='firefu'&&skillId===2)originalFirefuSounds[i]='assets/audio/sfx/characters/attack_firefu3.mp3';
+  if(c==='lkd'&&skillId===1)soundCues.push({seat:i,file:lkdSoundFile(4),replaceAttack:true});
+  if(c==='sad'&&skillId===1)soundCues.push({seat:i,file:sadSoundFile(4)});
   d.aura={char:c||'',start:Date.now()};
   const charSkills=(CHARS[c]&&CHARS[c].d25Skills)||[
     {id:1,name:'崩滅之刃',desc:'對敵方造成 15 點直接傷害'},
@@ -2720,15 +2919,13 @@ function applyD25Effect(r,i,skillId,forced=false){
 
   if(skObj&&typeof skObj.instantFx==='function'){
     const msg=skObj.instantFx(r,i,o);
-    if(msg&&typeof msg==='object'){L.push(...(msg.log||[]));attackHits.push(...(msg.hits||[]));attackDamage.push(...(msg.damage||[]));attackCombat.push(...(msg.combat||[]));attackHealing.push(...(msg.healing||[]));charactersSettled=!!msg.charactersSettled}else if(msg)L.push(msg);
+    if(msg&&typeof msg==='object'){L.push(...(msg.log||[]));attackHits.push(...(msg.hits||[]));attackDamage.push(...(msg.damage||[]));attackCombat.push(...(msg.combat||[]));attackHealing.push(...(msg.healing||[]));soundCues.push(...(msg.soundCues||[]));charactersSettled=!!msg.charactersSettled}else if(msg)L.push(msg);
   }else if(skillId===1){
     const dmg=envAttack(r,15),shieldBefore=o!==undefined?r.st[o].shield||0:0;
     let actualDmg=dmg;
-    if(o!==undefined&&(r.st[o].shield||0)>0){
-      const abs=Math.min(r.st[o].shield,actualDmg);
-      r.st[o].shield-=abs;
-      r.st[o].shieldPersistent=Math.max(0,(r.st[o].shieldPersistent||0)-abs);
-      actualDmg-=abs;
+    if(o!==undefined){
+      const shield=absorbShield(r.st[o],actualDmg),abs=shield.absorbed;
+      actualDmg=shield.remaining;
       if(abs>0)attackHits.push(i);
       addDamageFx(attackDamage,r,o,abs,undefined,true);
       L.push(`${nm(o)} 的護盾抵擋了 ${abs} 點傷害`);
@@ -2750,10 +2947,10 @@ function applyD25Effect(r,i,skillId,forced=false){
 
   if(!charactersSettled){environmentThorns(r,i,attackDamage.slice(),L,attackDamage);attackHealing.slice().forEach(e=>shareEnvironmentHealing(r,e.seat,e.amount,L,attackHealing))}
   markEnvironmentSupportDamage(r,{combat:attackCombat,hits:attackHits,damage:attackDamage});
-  settleInstantBattle(r,L,charactersSettled);
+  settleInstantBattle(r,L,charactersSettled,{damage:attackDamage,combat:attackCombat,healing:attackHealing,hits:attackHits,soundCues});
 
   syncEnvironmentTeam(r);
-  return {log:L,hits:[...new Set(attackHits)],damage:attackDamage,combat:attackCombat,healing:attackHealing,chars:originalChars,weapons:originalWeapons,firefuSounds:originalFirefuSounds};
+  return {log:L,hits:[...new Set(attackHits)],damage:attackDamage,combat:attackCombat,healing:attackHealing,chars:originalChars,weapons:originalWeapons,firefuSounds:originalFirefuSounds,soundCues};
 }
 function activateCrisis(r,log){
   const alive=r.seats.map((_,i)=>i).filter(i=>r.hp[i]>0),low=Math.min(...alive.map(i=>r.hp[i])),i=rnd(alive.filter(i=>r.hp[i]===low));if(i===undefined)return;
@@ -2762,22 +2959,22 @@ function activateCrisis(r,log){
   // 環境直接啟用效果；沉默仍保留，交易稍後繼續，但不得帶回舊的絕技資格。
   const trade=r.env.trade,silence=environmentEvents(r).filter(e=>e.id==='silence');if(trade){delete trade.banner;r.env.trade=null}
   if(silence.length){if(r.env.event?.id==='silence')r.env.event=null;r.env.extraEvents=(r.env.extraEvents||[]).filter(e=>e.id!=='silence')}
-  const damage=[],healing=[],hits=[],combat=[],chars=[...r.chars],weapons=valorantWeaponSnapshot(r),pair=[...r.pair];
+  const damage=[],healing=[],hits=[],combat=[],soundCues=[],chars=[...r.chars],weapons=valorantWeaponSnapshot(r),pair=[...r.pair];
   log.push(`🌟【危機就是轉機】${r.seats[i].name} 同時啟用兩種25絕技！`);
   // 先啟用輔助招，再施放進攻招；離索兩招都完成後才建立決滅快照。
-  for(const skill of [2,1]){const result=applyD25Effect(r,i,skill,true);log.push(...result.log);damage.push(...result.damage);healing.push(...result.healing);hits.push(...result.hits);combat.push(...result.combat)}
+  for(const skill of (chars[i]==='kira'?[1,2]:[2,1])){const result=applyD25Effect(r,i,skill,true);log.push(...result.log);damage.push(...result.damage);healing.push(...result.healing);hits.push(...result.hits);combat.push(...result.combat);soundCues.push(...(result.soundCues||[]))}
   r.d25[i].aura.crisis=true;
   if(trade)r.env.trade=trade;silence.forEach(e=>{if(['mirror','skyfall'].includes(e.source))r.env.extraEvents.push(e);else r.env.event=e});
   r.env.deferredD25=null;r.d25Banner=null;if(r.env.trade)delete r.env.trade.banner;
   returnBattleMoves(r,-1,log,pair);syncEnvironmentTeam(r);
   if(r.isoDuel)r.isoDuel.snapshot=JSON.parse(JSON.stringify({...r,isoDuel:undefined,phase:'play'}));
-  r.instantFx={id:(r.instantFx?.id||0)+1,seat:i,chars,weapons,hits:[...new Set(hits)],damage,combat,healing,log:[...log]};
+  r.instantFx={id:(r.instantFx?.id||0)+1,seat:i,chars,weapons,hits:[...new Set(hits)],damage,combat,healing,soundCues,log:[...log]};
   return i;
 }
 function beginQueuedIsoUltimate(r,log){if(r.status!=='playing'||isoPending(r))return;while(r.isoUltimateQueue?.length){const q=r.isoUltimateQueue.shift();if(r.hp[q.seat]>0&&r.chars[q.seat]==='iso'&&(r.act?.[q.seat]??-1)===q.member&&beginIsoUltimate(r,q.seat,log,false))return}delete r.isoUltimateQueue}
 function activateFrenzy(r,log){
   const seats=r.seats.map((_,i)=>i).filter(i=>r.hp[i]>0),caster=rnd(seats);if(caster===undefined)return;
-  const chars=[...r.chars],weapons=valorantWeaponSnapshot(r),pair=[...r.pair],start=Date.now(),damage=[],healing=[],hits=[],combat=[];
+  const chars=[...r.chars],weapons=valorantWeaponSnapshot(r),pair=[...r.pair],start=Date.now(),damage=[],healing=[],hits=[],combat=[],soundCues=[];
   queueEnvironmentFx(r,'frenzy','arrival',[],[],{caster,focus:seats.map(seat=>({seat,member:r.act?.[seat]??-1})),detail:'全員雙25絕技啟動'});
   resetEnvironmentD25Banner(r);r.d25Claimed=true;r.env.frenzyBgmSeat=caster;
   seats.forEach(i=>Object.assign(r.d25[i],{val:25,bust:false,used:true,ready:false}));
@@ -2785,19 +2982,19 @@ function activateFrenzy(r,log){
   if(r.env.event?.id==='silence')r.env.event=null;r.env.extraEvents=(r.env.extraEvents||[]).filter(e=>e.id!=='silence');
   // 原角色全數施放完畢後，才一起判定倒下、復活與換人；離索決滅最後啟動。
   r.d25Batch={iso:[]};log.push('🔥【發瘋啦!!】所有存活玩家同時啟用兩種25絕技！');
-  for(const skill of [2,1])for(const i of seats){const result=applyD25Effect(r,i,skill,true);log.push(...result.log);damage.push(...result.damage);healing.push(...result.healing);hits.push(...result.hits);combat.push(...result.combat)}
-  const autoZilu=r.d25Batch.autoZilu||{};r.isoUltimateQueue=[...(r.isoUltimateQueue||[]),...r.d25Batch.iso];delete r.d25Batch;
+  for(const skill of [2,1])for(const i of seats){const result=applyD25Effect(r,i,chars[i]==='kira'?3-skill:skill,true);log.push(...result.log);damage.push(...result.damage);healing.push(...result.healing);hits.push(...result.hits);combat.push(...result.combat);soundCues.push(...(result.soundCues||[]))}
+  const autoZilu=r.d25Batch.autoZilu||{},spk=r.d25Batch.spk||{};r.isoUltimateQueue=[...(r.isoUltimateQueue||[]),...r.d25Batch.iso];delete r.d25Batch;
   seats.forEach(i=>r.d25[i].aura={char:chars[i],start,crisis:true});
   if(trade)r.env.trade=trade;silence.forEach(e=>{if(['mirror','skyfall'].includes(e.source))r.env.extraEvents.push(e);else r.env.event=e});
   r.env.deferredD25=null;r.d25Banner=null;if(r.env.trade)delete r.env.trade.banner;
-  syncEnvironmentTeam(r);r.seats.forEach((_,i)=>r.hp[i]=protectLife(r.chars[i],r.st[i],r.hp[i],r.seats[i].name,log));Object.assign(r,settleCharacters(r,{hp:r.hp,st:r.st,cp:r.cp,team:r.team,autoZilu,log,instant:true}));settleInstantBattle(r,log,true);returnBattleMoves(r,-1,log,pair);syncEnvironmentTeam(r);
-  r.instantFx={id:(r.instantFx?.id||0)+1,seat:caster,chars,weapons,hits:[...new Set(hits)],damage,combat,healing,log:[...log]};
+  syncEnvironmentTeam(r);r.seats.forEach((_,i)=>{if(spk[i])r.hp[i]=0;else r.hp[i]=protectLife(r.chars[i],r.st[i],r.hp[i],r.seats[i].name,log)});Object.assign(r,settleCharacters(r,{hp:r.hp,st:r.st,cp:r.cp,team:r.team,autoZilu,spk,log,instant:true}));settleInstantBattle(r,log,true);returnBattleMoves(r,-1,log,pair);syncEnvironmentTeam(r);
+  r.instantFx={id:(r.instantFx?.id||0)+1,seat:caster,chars,weapons,hits:[...new Set(hits)],damage,combat,healing,soundCues,log:[...log]};
   beginQueuedIsoUltimate(r,log);return caster;
 }
 function useD25(i,skillId){
   if(battleObservationActive())return;
   if(isoPending()||valorantShopPending()||mirrorPending()||envSilent(room)||d25DrawPending()||environmentTradePending()||!timeActionOpen(room,i))return;
-  const r=JSON.parse(JSON.stringify(room)),d=r.d25?.[i];if(!d||!d.ready||d.used)return;
+  const r=JSON.parse(JSON.stringify(room)),d=r.d25?.[i];if(!d||!d.ready||d.used||!d25SkillAvailable(r,i,skillId))return;
   const lock=`u25_${r.round}_${i}`;busy=lock;
   try{
     d.ready=false;d.used=true;const pair=[...r.pair],result=applyD25Effect(r,i,skillId);
@@ -2809,13 +3006,13 @@ function useD25(i,skillId){
   }finally{if(busy===lock)busy=''}tick();
 }
 function useS(i){if(isoPending()||valorantShopPending()||mirrorPending()||envSilent(room)||environmentTradePending()||!sAvail(i)||!timeActionOpen(room,i))return;const S=CHARS[room.chars[i]].ss,r=JSON.parse(JSON.stringify(room)),o=r.pair.find(x=>x!==i),nm=n=>r.seats[n].name,lock=`instant_${r.round}_${i}`;busy=lock;
-  try{r.cp=[...(r.cp||r.seats.map(()=>0))];r.cp[i]-=S.cost;r.st[i].sRound=r.round;
-    const L=[`${nm(i)} 發動S技【${S.n}】（-${S.cost} CP）`];
+  try{const originalMember=r.act?.[i]??-1,originalChar=r.chars[i];r.cp=[...(r.cp||r.seats.map(()=>0))];r.cp[i]-=S.cost;r.st[i].sRound=r.round;
+    const L=[['lkd','kira','drunk'].includes(r.chars[i])?`${nm(i)} 發動【${S.n}】`:`${nm(i)} 發動S技【${S.n}】（-${S.cost} CP）`];
     if(S.fx){const m=S.fx(r,i,o);if(m)L.push(m)}
-    returnBattleMoves(r,i,L);r.sLog=L;syncEnvironmentTeam(r);if(r.cfg.time)r.deadline=Date.now()+r.cfg.time*1000;db.doc(`rooms/${code}/moves/s${r.round}_${i}`).set(null);save(r);
+    returnBattleMoves(r,(r.act?.[i]??-1)!==originalMember||r.chars[i]!==originalChar?-1:i,L);r.sLog=L;syncEnvironmentTeam(r);if(r.cfg.time)r.deadline=Date.now()+r.cfg.time*1000;db.doc(`rooms/${code}/moves/s${r.round}_${i}`).set(null);save(r);
   }finally{if(busy===lock)busy=''}tick();
 }
-const sAvail=s=>{const C=CHARS[room.chars[s]],S=C&&C.ss;return !envSilent(room)&&S&&cpOf(s)>=S.cost&&room.st[s].sRound!==room.round&&!(room.st[s].sealT>0)&&!(room.st[s].stun>0)&&(!S.can||S.can(room,s))};
+const sAvail=s=>{const C=CHARS[room.chars[s]],S=C&&C.ss;return !envSilent(room)&&S&&cpOf(s)>=S.cost&&(S.repeat||room.st[s].sRound!==room.round)&&!(room.st[s].sealT>0)&&!(room.st[s].stun>0)&&(!S.can||S.can(room,s))};
 function playS(){if(isoPending()||valorantShopPending()||mirrorPending()||environmentTradePending())return;db.doc(`rooms/${code}/moves/s${room.round}_${rd()}`).set({s:1})}
 function leave(){cleanup();netClose();test=false;code=null;lobbyView='home';lobbyNormalChars=true;lobbyFixedMode=false;render()}
 function unlockTest(){if(prompt('請輸入測試區密碼')==='1234'){setLobbyView('create');document.getElementById('tbox').style.display=''}else alert('密碼錯誤')}
@@ -2831,26 +3028,36 @@ function startTest(){const hand=num('hand',3,8,6),mode=val('mode'),cfg=modeConfi
 
 /* ---------- 畫面 ---------- */
 const markedFor=(owner,c)=>!envSilent(room)&&owner!==undefined&&!!(room&&room.st&&room.chars&&room.chars.some((ch,i)=>ch==='dihui'&&room.st[i].markTarget===owner&&(room.st[i].markedCards||[]).includes(c)));
-const chip=(c,owner)=>`<span class="chip ${RED[c[0]]?'r':''} ${markedFor(owner,c)?'dihui-marked':''}" title="${markedFor(owner,c)?'已被地彗星標記':' '}">${cs(c)}</span>`;
+const chip=(c,owner,up=true)=>!drunkCanSee(room,rd(),owner,up)?'<span class="chip" title="牌面隱藏">🂠</span>':`<span class="chip ${RED[c[0]]?'r':''} ${markedFor(owner,c)?'dihui-marked':''}" title="${markedFor(owner,c)?'已被地彗星標記':' '}">${cs(c)}</span>`;
+function drunkCardTxt(c,owner,up=true){return drunkCanSee(room,rd(),owner,up)?cs(c):'🂠 隱藏牌'}
+function drunkLogText(text){return drunkActive(room,rd())&&!drunkAwake(room.st[rd()])&&room.st[rd()].drunkSip>=6?text.replace(/[♠♥♡♣♦](?:10|1[123]|[2-9AJQK])/g,'🂠'):text}
+function pickDrunkCard(up,index){const i=rd(),pool=up?room.up[i]:subtractCards(room.hands[i],room.up[i]);if(pool[index])pick(pool[index],up)}
+function toggleDrunkHide(index){const i=rd(),hidden=subtractCards(room.hands[i],room.up[i]);if(hidden[index])toggleHide(hidden[index],index)}
+let privateDrunkSight=null;
+function syncDrunkSight(r){if(!isHost&&!test)return r;r.seats.forEach((seat,i)=>{if(seat.id===uid||test)return;const visible=drunkActive(r,i)&&drunkAwake(r.st[i]),cards=visible?Object.fromEntries(r.seats.map((_,j)=>[j,(hostSunCards[j]||[]).filter(c=>c.expires>=r.round).map(c=>({...c}))])):{};sendPrivateTo(seat.id,{drunkSight:{code,round:r.round,cards}})});return r}
+function drunkTemporaryCards(i){if(drunkActive(room,rd())&&drunkAwake(room.st[rd()]))return (isHost||test?hostSunCards[i]:privateDrunkSight?.code===code&&privateDrunkSight.round===room.round?privateDrunkSight.cards[i]:null)||publicTemporaryCards(room,i);return publicTemporaryCards(room,i)}
+function visibleHandUI(i){const up=room.up[i]||[],awake=drunkActive(room,rd())&&drunkAwake(room.st[rd()]),cards=awake?(room.hands[i]||[]):up;return cards.map(c=>chip(c,i,up.includes(c))).join('')+drunkTemporaryCards(i).map(c=>chip(c.card,i,publicTemporaryCards(room,i).some(x=>x.id===c.id))).join('')}
 function cardFace(c,tag=''){
   if(c==='B0')return'<span class="card-pip" aria-label="炸彈">💣</span><small class="card-visibility">傳遞炸彈</small>';
   const corner=`<b>${NM(+c.slice(1))}</b><i>${SU[c[0]]}</i>`;
   return`<span class="card-corner" aria-hidden="true">${corner}</span><span class="card-pip" aria-hidden="true">${SU[c[0]]}</span><span class="card-corner reverse" aria-hidden="true">${corner}</span>${tag?`<small class="card-visibility">${tag}</small>`:''}`;
 }
 function cardBtn(c,h,up,owner,slot=null){
+  if(!drunkCanSee(room,rd(),owner,up))return `<button class="c concealed ${sel===c&&selUp===up?'sel':''}" aria-label="隱藏牌" title="牌面隱藏，選牌後不顯示預覽" onclick="pickDrunkCard(${!!up},${slot??0})"><span class="card-pip">🂠</span><small class="card-visibility">隱藏牌</small></button>`;
   const thirst=owner!==undefined&&firefuThirstCard(room,owner,c);
   const U=room.env?.ultimatums?.[owner],ultimatum=owner!==undefined&&U?.card===c&&!U.sunId&&(slot===null||up&&room.up[owner].indexOf(c)===slot),marked=markedFor(owner,c),noDiamond=!!(h==='pick'&&owner!==undefined&&diamondBanned(room,owner)&&c[0]==='D');
   return`<button class="c ${RED[c[0]]?'r':''} ${sel===c&&(selUp===null||selUp===up)?'sel':''} ${up?'up':'concealed'} ${cmdCard(c)?'cmd':''} ${ultimatum?'marked':''} ${marked?'dihui-marked':''} ${h==='pick'&&environmentFateCard(c)?'fate-card':''} ${noDiamond?'disabled':''}" ${noDiamond?'disabled':''} aria-label="${cs(c)}，${up?'明牌':'暗牌'}" aria-pressed="${sel===c&&(selUp===null||selUp===up)}" title="${esc((thirst?'🔥渴火：牌面10點，仍受加成，永久暗牌｜':'')+(noDiamond?'🚫 連續防守懲罰：本回合無法出方塊牌｜':'')+(ultimatum?'📜最後通牒標記｜':'')+(marked?'☄已被地彗星標記｜':'')+estimate(c,h))}" onclick="${noDiamond?'':h+'(\''+c+'\''+(h==='pick'?','+up:'')+')'}">${cardFace(c,thirst?'渴火 · 暗牌':ultimatum?'最後通牒':'')}${h==='pick'?environmentCardMark(c)+environmentHandFxUI(c,owner,ultimatum):''}</button>`;
 }
-function tempSunButtons(s){return(s===rd()?privateSunCards:[]).map(x=>{const marked=room.env?.ultimatums?.[s]?.sunId===x.id,publicCard=publicTemporaryCards(room,s).some(c=>c.id===x.id);return`<button class="c sun ${publicCard?'up':'concealed'} ${marked?'marked':''} ${environmentFateCard(x.card)?'fate-card':''} ${RED[x.card[0]]?'r':''} ${sunCardSel===x.id?'sel':''}" aria-label="${cs(x.card)}，向日葵暫時手牌" aria-pressed="${sunCardSel===x.id}" title="${esc('向日葵暫時手牌，點數'+(+x.card.slice(1))+'；下回合結束時消失。'+estimate(x.card,'pick'))}" onclick="pickSunCard('${x.id}')">${cardFace(x.card,marked?'最後通牒':publicCard?'公開暫時手牌':'暫時手牌')}${environmentCardMark(x.card)}${environmentHandFxUI(x.card,s,marked)}</button>`}).join('')}
+function tempSunButtons(s){return(s===rd()?privateSunCards:[]).map(x=>{const marked=room.env?.ultimatums?.[s]?.sunId===x.id,publicCard=publicTemporaryCards(room,s).some(c=>c.id===x.id);if(!drunkCanSee(room,s,s,publicCard))return`<button class="c sun concealed ${sunCardSel===x.id?'sel':''}" aria-label="隱藏暫時手牌" title="下回合結束時消失" onclick="pickSunCard('${x.id}')"><span class="card-pip">🂠</span><small class="card-visibility">暫時手牌</small></button>`;return`<button class="c sun ${publicCard?'up':'concealed'} ${marked?'marked':''} ${environmentFateCard(x.card)?'fate-card':''} ${RED[x.card[0]]?'r':''} ${sunCardSel===x.id?'sel':''}" aria-label="${cs(x.card)}，向日葵暫時手牌" aria-pressed="${sunCardSel===x.id}" title="${esc('向日葵暫時手牌，點數'+(+x.card.slice(1))+'；下回合結束時消失。'+estimate(x.card,'pick'))}" onclick="pickSunCard('${x.id}')">${cardFace(x.card,marked?'最後通牒':publicCard?'公開暫時手牌':'暫時手牌')}${environmentCardMark(x.card)}${environmentHandFxUI(x.card,s,marked)}</button>`}).join('')}
 function handSelectionUI(s){
+  if(sel&&!drunkCanSee(room,s,s,sunCardSel?publicTemporaryCards(room,s).some(x=>x.id===sunCardSel):!!selUp))return '<div class="selection-preview"><span>已選隱藏牌</span><p>牌面隱藏，出牌時依實際卡牌結算。</p></div>';
   const temp=sunCardSel&&privateSunCards.find(x=>x.id===sunCardSel),card=temp?temp.card:sel;
   return`<div class="selection-preview ${card?'':'empty'}"><span>${card?'已選 '+cs(card):'預計效果'}</span>${environmentFateCard(card)?'<small class="fate-selection-note">✨ 命運加成＋5（固定點數效果仍優先）</small>':''}<p>${card?esc(estimate(card,'pick')):'選擇一張手牌，查看預計效果。'}</p></div>`;
 }
 function playHandUI(s,mine,up,names){
   const cards=[...mine];
   const supply=room.env?.supply[s]||0;
-  const skills=`<div class="skill-controls">${room.st[s].bombs?.length?`<button type="button" class="bomb-pass-btn ${room.st[s].bombs[0].left<=2?'imminent':''}" onclick="passBomb()">💣 傳遞炸彈・取代出牌（剩${room.st[s].bombs[0].left}次出戰）</button>`:''}${supply?`<span class="mut">📦 補給折抵×${supply}（下次換牌-5血）</span>`:''}${skillLabel(s)?`<label><input type="checkbox" ${skOn?'checked':''} onchange="skOn=this.checked;render()"> 發動【${skillLabel(s)}】</label>`:''}${artSel(s)}${leiSel(s)}${repOk(s)?'<button onclick="playRep()">Furioso-Replica</button>':''}${sAvail(s)?`<button onclick="playS()">S技【${CHARS[room.chars[s]].ss.n}】· ${CHARS[room.chars[s]].ss.cost}CP</button>`:''}<button class="redraw-button ${supply?'supply-ready':''}" onclick="playRedraw()">${supply?'<span class="supply-button-mark" aria-hidden="true">📦</span>':''}我牌太爛啦！（扣 ${redrawCost(room,s)} 血）</button></div>`;
+  const skills=`<div class="skill-controls">${room.st[s].bombs?.length?`<button type="button" class="bomb-pass-btn ${room.st[s].bombs[0].left<=2?'imminent':''}" onclick="passBomb()">💣 傳遞炸彈・取代出牌（剩${room.st[s].bombs[0].left}次出戰）</button>`:''}${supply?`<span class="mut">📦 補給折抵×${supply}（下次換牌-5血）</span>`:''}${skillLabel(s)?`<label><input type="checkbox" ${skOn?'checked':''} onchange="skOn=this.checked;render()"> 發動【${skillLabel(s)}】</label>`:''}${artSel(s)}${leiSel(s)}${repOk(s)?'<button onclick="playRep()">Furioso-Replica</button>':''}${sAvail(s)?`<button onclick="playS()">${['lkd','kira','drunk'].includes(room.chars[s])?'主動技':'S技'}【${CHARS[room.chars[s]].ss.n}】${CHARS[room.chars[s]].ss.cost?'· '+CHARS[room.chars[s]].ss.cost+'CP':''}</button>`:''}<button class="redraw-button ${supply?'supply-ready':''}" onclick="playRedraw()">${supply?'<span class="supply-button-mark" aria-hidden="true">📦</span>':''}我牌太爛啦！（${freeLkdRedraw(room,s)?'免費・剩'+room.st[s].lkdRedraws+'次':'扣 '+redrawCost(room,s)+' 血'}）</button></div>`;
   return`<div class="hand-workspace"><div class="hand-cards"><div class="hand-heading"><h3>你的手牌</h3><span>${mine.length+privateSunCards.length} 張 · 對手 ${esc(names[room.pair.find(x=>x!==s)])}</span></div><div class="hand">${up.map((c,k)=>cardBtn(c,'pick',true,s,k)).join('')}${subtractCards(cards,up).map((c,k)=>cardBtn(c,'pick',false,s,k)).join('')}${tempSunButtons(s)}</div></div><div class="selection-row">${skills}<div class="hand-extra-actions">${askUI(s)}${dihuiUI(s)}${plantsUI(s)}${mosesBreathUI(s)}${isoSkillsUI(s)}</div>${handSelectionUI(s)}<button class="pri commit-card" ${sel?'':'disabled'} onclick="play()">出牌 →</button></div></div>`;
 }
 function lobbyUI(){return`<main class="lobby-shell" id="lobbyShell" data-view="${lobbyView}" aria-labelledby="lobbyTitle">
@@ -2907,7 +3114,7 @@ function render(){try{syncBgm()}catch(e){}
     const hid=room.hands[i].length+(i===s?privateSunCards.length:0)-room.up[i].length;
     return`<div data-damage-target="${i}:summary" class="pl ${room.hp[i]<=0?'dead':''}">${!room.pair.includes(i)?environmentTargetFxUI(i,room.team?room.act[i]:-1):''}<div class="row" style="justify-content:space-between;margin:0"><b class="${i===s?'me':''}">${cfg.boss?(i===1?'👑 Boss｜':'🤝 挑戰者｜'):''}${esc(p.name)}${room.chars[i]?'【'+CHARS[room.chars[i]].n+'】':''}${i===s?'（你）':''}${playing&&room.turn===i&&cfg.n===3?' 🎯':''}${inPair?' ⚔️':''}</b><span>${Math.max(0,room.hp[i])} / ${maxHp(i)} ${done?'✅':''}</span></div>
     ${healthBarUI(i)}${timeClockUI(i)}${combatStatusUI(i)}${cfg.v3&&cfg.n===3&&!cfg.boss&&!room.pair.includes(i)?`<div class="spectator-team">${teamInfo(i)}${resv(i,'left')}</div>`:''}
-    ${i!==s?`<div class="mut">${room.up[i].map(c=>chip(c,i)).join('')} ${hid?`🂠×${hid}`:''}</div>`:''}${!room.pair.includes(i)||(d25AuraOf(i)&&d25AuraOf(i).char!==room.chars[i])?d25AuraUI(i,true):''}</div>`}).join('');
+    ${i!==s?`<div class="mut">${visibleHandUI(i)} ${hid?`🂠×${hid}`:''}</div>`:''}${!room.pair.includes(i)||(d25AuraOf(i)&&d25AuraOf(i).char!==room.chars[i])?d25AuraUI(i,true):''}</div>`}).join('');
   const timer=playing&&room.deadline?'<div class="mut" id="tm"></div>':'';
   let act='';
   if(!playing)act=`<b style="font-size:18px">${room.winner>=0?'🏆 '+(cfg.boss?(room.winner===1?'Boss方':'挑戰者方')+'（'+esc(names[room.winner])+'）':esc(names[room.winner]))+' 獲勝！':'平手！全員倒下'}</b><div class="row" style="justify-content:center"><button class="pri" onclick="rematch()">再來一場</button><button onclick="leave()">離開房間</button></div>`;
@@ -2921,25 +3128,27 @@ function render(){try{syncBgm()}catch(e){}
   else{const mine=room.hands[s],up=room.up[s];
     if(room.phase==='answer'){
       const q=room.question||{},target=q.target,asker=q.by,question=q.kind==='max'?'你的最大點數是多少？':`你的${SU[q.suit]}有幾張？`;
-      if(s===target){const submitted=moves['a'+room.round+'_'+s],cards=[...(room.hands[s]||[]),...(test?(hostSunCards[s]||[]).filter(x=>x.expires>=room.round).map(x=>x.card):privateSunCards.map(x=>x.card))];act=`<div>賈丘問你：${esc(question)}</div><div class="mut">你的手牌（已出牌已退回）：</div><div class="hand">${cards.map(c=>`<span class="chip ${RED[c[0]]?'r':''}">${cs(c)}</span>`).join('')||'<span class="mut">沒有手牌</span>'}</div>${submitted?`<div class="mut">你回答：「${esc(submitted.answer)}」，等待判定…</div>`:`<div class="row" style="justify-content:center"><input id="jiaAnswer" type="number" min="0" max="13" placeholder="回答數字"><button class="pri" onclick="answerJia()">回答</button></div>`}`}
+      if(s===target){const submitted=moves['a'+room.round+'_'+s],cards=[...(room.hands[s]||[]),...(test?(hostSunCards[s]||[]).filter(x=>x.expires>=room.round).map(x=>x.card):privateSunCards.map(x=>x.card))];act=`<div>賈丘問你：${esc(question)}</div><div class="mut">你的手牌（已出牌已退回）：</div><div class="hand">${cards.map(c=>chip(c,s,room.up[s].includes(c))).join('')||'<span class="mut">沒有手牌</span>'}</div>${submitted?`<div class="mut">你回答：「${esc(submitted.answer)}」，等待判定…</div>`:`<div class="row" style="justify-content:center"><input id="jiaAnswer" type="number" min="0" max="13" placeholder="回答數字"><button class="pri" onclick="answerJia()">回答</button></div>`}`}
       else{const response=moves['a'+room.round+'_'+target];act=`賈丘正在詢問 ${esc(names[target])}：${esc(question)}${response?`<div class="mut">${esc(names[target])} 回答：「${esc(response.answer)}」，等待判定…</div>`:'<div class="mut">等待對方回答…</div>'}`}
     }else if(room.phase==='play'){
       if(!room.pair.includes(s))act=cfg.boss?'<div><b>與另一名挑戰者互為隊友</b><div class="mut">本回合由另一位挑戰者出戰；你不會被當作敵人或旁觀猜測者。</div></div>':specView(s);
+      else if(kiraCardLocked(room,s))act='🚫 受到綺羅技能影響，本回合無法出牌'+(sAvail(s)?`<button onclick="playS()">${['lkd','kira','drunk'].includes(room.chars[s])?'主動技':'S技'}【${esc(CHARS[room.chars[s]].ss.n)}】</button>`:'');
       else if(!envSilent(room)&&(room.st[s].stun||0)>0)act='😵 你被暈眩，本回合無法出牌或行動'
       else if(!envSilent(room)&&(room.st[s].san||0)<=-45&&CHARS[room.chars[s]]?.f==='bus')act='🌀 理智 -45：侵蝕中，系統將隨機選牌並依花色觸發侵蝕效果；本回合結算後，下回合理智重置為0'
-      else if(moves[room.round+'_'+s])act=`你已出牌 <b>${moves[room.round+'_'+s].hidden?'暫時手牌':moves[room.round+'_'+s].rep?'Furioso-Replica':moves[room.round+'_'+s].redraw?'「我牌太爛啦！」':moves[room.round+'_'+s].bomb?'💣 傳遞炸彈':cs(moves[room.round+'_'+s].card)}</b>，等待對手…${dihuiUI(s)}${plantsUI(s)}`;
+      else if(moves[room.round+'_'+s])act=`你已出牌 <b>${moves[room.round+'_'+s].hidden?'暫時手牌':moves[room.round+'_'+s].rep?'Furioso-Replica':moves[room.round+'_'+s].redraw?'「我牌太爛啦！」':moves[room.round+'_'+s].bomb?'💣 傳遞炸彈':drunkCardTxt(moves[room.round+'_'+s].card,s,moves[room.round+'_'+s].visible===true)}</b>，等待對手…${dihuiUI(s)}${plantsUI(s)}`;
       else act=playHandUI(s,mine,up,names)}
+    else if(room.pend.includes(s)&&drunkActive(room,s)&&room.st[s].drunkSip>=4)act='系統隨機蓋牌中…';
     else if(room.pend.includes(s)){
       if(moves['v'+room.round+'_'+s])act='已選擇，等待其他玩家…';
       else{const hid=subtractCards(mine,up),need=hid.length-Math.max(0,room.oc[s]-up.length);
-        act=`<div class="mut">選擇要保持暗牌的牌（${hideSel.length}/${need}），其餘將公開</div><div class="hand">${hid.map((c,index)=>`<button class="c concealed ${RED[c[0]]?'r':''} ${hideSlots.includes(index)?'sel':''}" onclick="toggleHide('${c}',${index})">${cardFace(c)}</button>`).join('')}</div>`}}
+        act=`<div class="mut">選擇要保持暗牌的牌（${hideSel.length}/${need}），其餘將公開</div><div class="hand">${hid.map((c,index)=>drunkCanSee(room,s,s,false,true)?`<button class="c concealed ${RED[c[0]]?'r':''} ${hideSlots.includes(index)?'sel':''}" onclick="toggleHide('${c}',${index})">${cardFace(c)}</button>`:`<button class="c concealed ${hideSlots.includes(index)?'sel':''}" aria-label="隱藏牌" onclick="toggleDrunkHide(${index})"><span class="card-pip">🂠</span></button>`).join('')}</div>`}}
     else act='等待對方選擇亮牌…'}
   if(test&&!battleObservationActive())act=`<div class="mut">🧪 目前操作：${esc(names[s])}</div>`+environmentTestUI()+testD25ContestUI()+act;
   let h=top+battleObservationUI()+arena(timer+act);
-  if(test)h+=`<div class="box mut">🧪 全部手牌（有底線＝已公開）${room.seats.map((p,i)=>`<div>${esc(p.name)}：${room.hands[i].map(c=>`<span class="chip ${RED[c[0]]?'r':''}" style="${room.up[i].includes(c)?'text-decoration:underline':''}">${cs(c)}</span>`).join('')}</div>`).join('')}</div>`;
+  if(test)h+=`<div class="box mut">🧪 全部手牌（有底線＝已公開）${room.seats.map((p,i)=>`<div>${esc(p.name)}：${room.hands[i].map(c=>chip(c,i,room.up[i].includes(c))).join('')}</div>`).join('')}</div>`;
   h+=cfg.n===3?`<div class="box players-summary"><b>全場玩家狀態</b>${pls}</div>`:`<div class="players-summary players-summary-hidden">${pls}</div>`;
   if(room.last){const L=room.last;
-    h+=`<details class="box"><summary>第 ${shownRound(L.round)} 回合詳細結果</summary><div class="log">${L.plays.map(p=>`<div>${esc(names[p.i])} 出了 <b>${cs(p.card)}</b></div>`).join('')}<hr style="border:0;border-top:1px solid var(--line)">${L.log.map(x=>`<div>${esc(x)}</div>`).join('')}</div></details>`}
+    h+=`<details class="box"><summary>第 ${shownRound(L.round)} 回合詳細結果</summary><div class="log">${L.plays.map(p=>`<div>${esc(names[p.i])} 出了 <b>${drunkCardTxt(p.card,p.i,true)}</b></div>`).join('')}<hr style="border:0;border-top:1px solid var(--line)">${L.log.map(x=>`<div>${esc(drunkLogText(x))}</div>`).join('')}</div></details>`}
   if(s>=0&&room.chars[s]){const C=CHARS[room.chars[s]],fd=room.chars[s]==='verg'?'維吉里烏斯理智固定顯示「?」，不套用Limbus共通理智增減傷、侵蝕或理智變化。':FACD[C.f];h+=`<details class="box"><summary>我的角色：${C.n}${C.t?'・'+C.t:''}</summary><div class="mut">陣營【${FAC[C.f]}】：${fd}<br>${C.d}</div></details>`}
   A.innerHTML=battleObservationActive()?`<div onkeydown="if(event.key==='Escape'){event.preventDefault();returnBattlePopup()}">${h}</div>`:h;animHp();flushCombatFx();syncCombatRecoil();flushHealingFx();flushDamageFx();focusD25Dialog()}
 
