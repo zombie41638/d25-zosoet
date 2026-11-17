@@ -692,8 +692,7 @@ details.box > summary + div { padding: 0 21px 21px; }
 .c.marked::after{content:'🎯';position:absolute;right:2px;top:1px;font-size:12px;line-height:1;text-shadow:none;filter:none}
 .chip.marked{position:relative;outline:2px solid #e9a94d;background:#fff0cc!important;color:#472e0e!important}
 .chip.marked::after{content:'🎯';font-size:10px;margin-left:3px}
-.c.dihui-marked{position:relative;outline:2px dashed #bb8cff;outline-offset:5px}
-.c.dihui-marked::before{content:'彗';position:absolute;left:-5px;bottom:-5px;z-index:5;padding:3px 5px;border:1px solid #d6baff;border-radius:6px;background:#44256d;color:#fff;font-size:11px;line-height:1;text-shadow:none}
+.c.dihui-marked,.combat-shell .c.dihui-marked{position:relative;border-color:#9c62d8!important;outline:2px dashed #bb8cff;outline-offset:2px}
 .chip.dihui-marked{border-bottom:2px dashed #aa72ef}
 .chip.dihui-marked::before{content:'彗';margin-right:3px;padding:1px 3px;border-radius:3px;background:#60368a;color:#fff;font-size:10px}
 
@@ -1126,6 +1125,8 @@ body.in-battle #aud button{min-height:30px;font-size:10px;padding:5px 10px}
 /* 暗牌以陰影區分，每項狀態可各自展開說明。 */
 .combat-shell .c.concealed{background:#d7d3c8}
 .combat-shell .c.concealed::before{content:'';position:absolute;inset:0;border-radius:inherit;box-shadow:inset 0 0 22px #00000024;pointer-events:none}
+.warden-shell .pc.selecting{outline:2px dashed #b9d9ec;outline-offset:3px}
+.warden-shell .clash-slot .selection-label{color:#cce6f5}
 .status-items{display:flex;flex-wrap:wrap;align-items:flex-start;gap:5px;margin:9px 0 6px;min-width:0}
 .status-item{min-width:0;max-width:100%;border:1px solid #455146;border-radius:3px;background:#ffffff04;color:#c9d3c6}
 .status-item>summary{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:4px 7px;font-size:11px;line-height:1.5;list-style:none;cursor:pointer;overflow-wrap:anywhere}
